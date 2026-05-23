@@ -219,9 +219,9 @@ PAD = "padding:28px 40px;"
 # ══════════════════════════════════════════════════════════════════════════════
 # TABS
 # ══════════════════════════════════════════════════════════════════════════════
-tab_d, tab_na, tab_u, tab_cd = st.tabs([
-    "⊞  Dashboard",
+tab_na, tab_d, tab_u, tab_cd = st.tabs([
     "+  New analysis",
+    "⊞  Dashboard",
     "✉  Updates · 3",
     "⊟  Company detail",
 ])
