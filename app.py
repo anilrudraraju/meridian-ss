@@ -90,6 +90,38 @@ STEPS = [
     (5,"Committee","4 min"),
     (6,"Memo","review"),
 ]
+# Each entry: (dimension, dim_color, metric, value_when_available, required_doc_keys, source_label)
+COVERAGE_FIELDS = [
+    # Setup
+    ("Setup","#8b5cf6","Market cap",           "$3.5B",              ["form10"],                   "Form 10 cover page"),
+    ("Setup","#8b5cf6","Index exclusion",       "Yes — below $4.2B Russell threshold", ["form10"], "Form 10 §Risk factors"),
+    ("Setup","#8b5cf6","Free float",            "57% (post-distribution)",["form10"],              "Form 10 §Capitalization"),
+    ("Setup","#8b5cf6","Forced selling est.",   "~$180M over 30 days", ["form10","parent_10k"],    "Index fund rebalance model"),
+    ("Setup","#8b5cf6","Spin record date",      "TBD",                ["form10"],                  "Form 10 §Distribution"),
+    # Business quality
+    ("Business","#3b82f6","ROIC",               "15.8%",              ["parent_10k"],              "10-K Note 12"),
+    ("Business","#3b82f6","FCF conversion",     "78%",                ["parent_10k"],              "10-K cash flow statement"),
+    ("Business","#3b82f6","Revenue growth (3yr)","2.1% CAGR",         ["parent_10k"],              "10-K segment revenue"),
+    ("Business","#3b82f6","Gross margin trend", "Deteriorating −180bps",["parent_10k","transcript_1"],"10-Q vs 10-K"),
+    ("Business","#3b82f6","Competitive moat",   "Moderate — 3 of 5",  ["investor_deck","transcript_1"],"Mgmt commentary"),
+    # Capital structure
+    ("Capital","#f59e0b","Net debt",            "$1.2B",              ["parent_10k"],              "10-K balance sheet"),
+    ("Capital","#f59e0b","Net debt / EBITDA",   "3.1x",               ["parent_10k"],              "10-K balance sheet"),
+    ("Capital","#f59e0b","Pension liability",   "$340M (underfunded)", ["parent_10k"],              "10-K Note 14"),
+    ("Capital","#f59e0b","Debt maturity wall",  "2027 ($450M)",        ["parent_10k"],              "10-K Note 9"),
+    ("Capital","#f59e0b","Interest coverage",   "3.8x",               ["parent_10k"],              "10-K income statement"),
+    # Valuation
+    ("Valuation","#10b981","EV / EBIT",         "9x (peer median 15x)",["parent_10k"],             "Derived from 10-K"),
+    ("Valuation","#10b981","P / FCF",           "7.2x",               ["parent_10k"],              "Post-div market cap"),
+    ("Valuation","#10b981","Dividend yield",    "5.6% (pro forma)",   ["parent_10k","newsletter"], "Assuming $0.88 annual"),
+    ("Valuation","#10b981","Sum-of-parts upside","38–72%",             ["investor_deck","newsletter"],"Mgmt deck + writeup"),
+    # Incentives
+    ("Incentives","#ec4899","CEO ownership",    "2.1% of shares",      ["newsletter"],             "Newsletter / proxy"),
+    ("Incentives","#ec4899","Mgmt comp mix",    "70% equity-linked",   ["newsletter"],             "Newsletter / proxy"),
+    ("Incentives","#ec4899","Buyback auth.",    "$500M (17% of float)",["transcript_1","newsletter"],"Earnings call"),
+    ("Incentives","#ec4899","Insider buying",   "None disclosed",      ["newsletter"],             "Newsletter / proxy"),
+]
+
 AGENTS = [
     ("S","Setup specialist",  "#8b5cf6", 82, "$1.6B cap excludes 3 indices CTL sits in. Forced selling highly likely."),
     ("B","Business quality",  "#3b82f6", 84, "ROIC 18.4% top-quartile. FCF conversion 92%. Growth 6-8%."),
@@ -767,7 +799,7 @@ with tab_cd:
     st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
     nav_c, content_c = st.columns([1,3], gap="medium")
 
-    CD_SECTIONS = [("Overview",None,"👁"),("Memos",3,"📄"),("Scorecard",None,"📊"),("Metrics",None,"📈"),("Promises",5,"✓"),("Documents",18,"📁"),("Notes",12,"🔖"),("Q&A",27,"💬")]
+    CD_SECTIONS = [("Overview",None,"👁"),("Coverage",None,"◎"),("Memos",3,"📄"),("Scorecard",None,"📊"),("Metrics",None,"📈"),("Promises",5,"✓"),("Documents",18,"📁"),("Notes",12,"🔖"),("Q&A",27,"💬")]
 
     with nav_c:
         cur_sec = st.session_state.cd_section
@@ -800,6 +832,47 @@ with tab_cd:
             st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
             st.markdown("<div style='font-weight:600;font-size:16px;margin-bottom:12px'>Business quality detail</div>", unsafe_allow_html=True)
             st.markdown('<div style="background:#2a2a2a;border-radius:10px;padding:20px 24px"><div style="display:grid;grid-template-columns:repeat(5,1fr);gap:16px"><div><div style="color:#94a3b8;font-size:12px;margin-bottom:4px">ROIC</div><div style="font-size:20px;font-weight:700">15.8%</div></div><div><div style="color:#94a3b8;font-size:12px;margin-bottom:4px">Growth</div><div style="font-size:20px;font-weight:700">2.1%</div></div><div><div style="color:#94a3b8;font-size:12px;margin-bottom:4px">FCF conv.</div><div style="font-size:20px;font-weight:700">78%</div></div><div><div style="color:#94a3b8;font-size:12px;margin-bottom:4px">Margin</div><div style="font-size:18px;font-weight:700;color:#f59e0b">Deteriorating</div></div><div><div style="color:#94a3b8;font-size:12px;margin-bottom:4px">Durability</div><div style="font-size:20px;font-weight:700">3 / 5</div></div></div></div>', unsafe_allow_html=True)
+        elif sec == "Coverage":
+            doc_states = st.session_state.na_doc_states
+            resolved_keys = {k for k,v in doc_states.items() if v in ("fetched","uploaded","url","text")}
+            total = len(COVERAGE_FIELDS)
+            filled = sum(1 for _,_,_,_,req,_ in COVERAGE_FIELDS if resolved_keys & set(req))
+
+            # Summary bar
+            pct = int(filled/total*100) if total else 0
+            st.markdown(f'<div style="margin-bottom:20px"><div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-weight:600;font-size:15px">Data coverage</span><span style="color:#94a3b8;font-size:13px">{filled} / {total} fields · {pct}%</span></div><div style="background:#2a2a2a;border-radius:4px;height:6px"><div style="background:#22c55e;border-radius:4px;height:6px;width:{pct}%"></div></div></div>', unsafe_allow_html=True)
+
+            # Group by dimension
+            dims_seen = []
+            for dim,_,_,_,_,_ in COVERAGE_FIELDS:
+                if dim not in dims_seen: dims_seen.append(dim)
+
+            for dim in dims_seen:
+                rows = [(m,v,req,src,clr) for d,clr,m,v,req,src in COVERAGE_FIELDS if d==dim]
+                dim_clr = next(clr for d,clr,_,_,_,_ in COVERAGE_FIELDS if d==dim)
+                dim_filled = sum(1 for _,_,req,_,_ in rows if resolved_keys & set(req))
+                st.markdown(f'<div style="display:flex;align-items:center;gap:8px;margin:18px 0 8px"><div style="width:10px;height:10px;border-radius:2px;background:{dim_clr}"></div><span style="font-weight:700;font-size:13px;color:{dim_clr}">{dim.upper()}</span><span style="color:#64748b;font-size:12px">· {dim_filled}/{len(rows)} fields</span></div>', unsafe_allow_html=True)
+
+                # Header row
+                st.markdown('<div style="display:grid;grid-template-columns:160px 1fr 1fr;padding:4px 10px;margin-bottom:2px"><span style="color:#64748b;font-size:11px">METRIC</span><span style="color:#64748b;font-size:11px">VALUE</span><span style="color:#64748b;font-size:11px">SOURCE / UNLOCK</span></div>', unsafe_allow_html=True)
+
+                for metric, value, req_keys, source_lbl, _ in rows:
+                    have = bool(resolved_keys & set(req_keys))
+                    if have:
+                        icon_html = '<span style="color:#22c55e;font-size:13px">✓</span>'
+                        val_html  = f'<span style="font-size:13px;font-weight:600">{value}</span>'
+                        src_html  = f'<span style="color:#64748b;font-size:12px">{source_lbl}</span>'
+                        row_bg    = "background:#1a2d1a;"
+                    else:
+                        icon_html = '<span style="color:#3a3a3a;font-size:13px">○</span>'
+                        val_html  = '<span style="color:#3a3a3a;font-size:13px">—</span>'
+                        # Show which doc(s) would unlock this
+                        doc_labels = {k: lbl for lbl,k in REQUIRED_DOCS}
+                        needed = " or ".join(doc_labels.get(k, k) for k in req_keys if k in doc_labels)
+                        src_html = f'<span style="color:#f59e0b;font-size:12px">→ add {needed}</span>'
+                        row_bg   = ""
+                    st.markdown(f'<div style="display:grid;grid-template-columns:160px 1fr 1fr;align-items:center;padding:9px 10px;border-radius:6px;margin-bottom:2px;{row_bg}"><div style="display:flex;align-items:center;gap:8px">{icon_html}<span style="font-size:13px;color:#94a3b8">{metric}</span></div><div>{val_html}</div><div>{src_html}</div></div>', unsafe_allow_html=True)
+
         elif sec == "Notes":
             cd_ticker = st.session_state.na_ticker or "VNTR"
             notes = get_notes(cd_ticker)
