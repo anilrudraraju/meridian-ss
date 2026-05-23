@@ -387,48 +387,77 @@ with tab_na:
             # STEP 2
             elif cur == 2:
                 resolved = _docs_resolved()
-                st.markdown('<div class="stitle">Step 2 · Documents</div><div class="ssub">Add documents three ways: EDGAR auto-fetch, PDF upload, or URL paste.</div>', unsafe_allow_html=True)
-                mc1,mc2,mc3 = st.columns(3)
-                with mc1:
-                    st.markdown('<div class="mcard"><div class="mcardtitle">⬇ EDGAR fetch</div><div class="mcarddesc">Form 10, 10-K, 10-Q, 8-K, DEF 14A</div></div>', unsafe_allow_html=True)
-                    if st.button("Fetch ↗", key="edgar_fetch", use_container_width=True):
+                st.markdown('<div class="stitle">Step 2 · Documents</div><div class="ssub">Fetch from EDGAR in bulk, or add each document via PDF upload or URL.</div>', unsafe_allow_html=True)
+
+                # ── Bulk EDGAR fetch ──
+                ec1, ec2 = st.columns([3, 1])
+                ec1.markdown('<div style="padding:4px 0"><div style="font-weight:600;font-size:14px">⬇ EDGAR bulk fetch</div><div style="color:#94a3b8;font-size:12px;margin-top:2px">Form 10, 10-K, 10-Q, 8-K, DEF 14A</div></div>', unsafe_allow_html=True)
+                with ec2:
+                    if st.button("Fetch from EDGAR ↗", use_container_width=True, key="edgar_fetch"):
                         st.session_state.na_doc_states["form10"]     = "fetched"
                         st.session_state.na_doc_states["parent_10k"] = "fetched"
                         st.toast("EDGAR fetch complete (placeholder)")
                         st.rerun()
-                with mc2:
-                    st.markdown('<div class="mcard"><div class="mcardtitle">⬆ Upload PDF</div><div class="mcarddesc">Decks, paywalled writeups</div></div>', unsafe_allow_html=True)
-                    up = st.file_uploader("", accept_multiple_files=True, type=["pdf"], key="doc_upload", label_visibility="collapsed")
-                    if up:
-                        st.session_state.na_doc_states["investor_deck"] = "uploaded"
-                        st.rerun()
-                with mc3:
-                    st.markdown('<div class="mcard"><div class="mcardtitle">🔗 Paste URL</div><div class="mcarddesc">Newsletters, transcripts, articles</div></div>', unsafe_allow_html=True)
-                    purl = st.text_input("", key="paste_url", placeholder="https://...", label_visibility="collapsed")
-                    if purl and st.button("Add", key="add_url"):
-                        st.session_state.na_doc_states["newsletter"] = "url"
-                        st.rerun()
 
-                st.markdown(f"<div style='height:16px'></div><div style='font-weight:600;margin-bottom:10px'>Checklist · {resolved} of {len(REQUIRED_DOCS)} resolved</div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='height:20px'></div><div style='font-weight:600;margin-bottom:8px'>Checklist · {resolved} of {len(REQUIRED_DOCS)} resolved</div>", unsafe_allow_html=True)
+
+                # ── Per-doc rows ──
                 for lbl2, key2 in REQUIRED_DOCS:
                     state = st.session_state.na_doc_states[key2]
-                    if state == "fetched":
-                        st.markdown(f'<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid #222"><div style="display:flex;align-items:center;gap:10px"><span style="color:#4ade80">✓</span><span style="font-size:14px">{lbl2}</span></div><span class="tag-edgar">EDGAR</span></div>', unsafe_allow_html=True)
-                    elif state == "uploaded":
-                        st.markdown(f'<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid #222"><div style="display:flex;align-items:center;gap:10px"><span style="color:#4ade80">✓</span><span style="font-size:14px">{lbl2}</span></div><span class="tag-up">Uploaded</span></div>', unsafe_allow_html=True)
-                    elif state == "url":
-                        st.markdown(f'<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid #222"><div style="display:flex;align-items:center;gap:10px"><span style="color:#4ade80">✓</span><span style="font-size:14px">{lbl2}</span></div><span class="tag-up">URL</span></div>', unsafe_allow_html=True)
-                    else:
-                        rl,rb = st.columns([3,2])
+
+                    if state in ("fetched", "uploaded", "url", "skipped"):
+                        badge_map = {"fetched":'<span class="tag-edgar">EDGAR</span>',"uploaded":'<span class="tag-up">Uploaded</span>',"url":'<span class="tag-up">URL</span>',"skipped":'<span class="tag-pend">Skipped</span>'}
+                        icon = "✓" if state != "skipped" else "—"
+                        ic   = "#4ade80" if state != "skipped" else "#64748b"
+                        dl, dm, dx = st.columns([4, 1.2, 0.4])
+                        dl.markdown(f'<div style="display:flex;align-items:center;gap:10px;padding:10px 0"><span style="color:{ic}">{icon}</span><span style="font-size:14px">{lbl2}</span></div>', unsafe_allow_html=True)
+                        dm.markdown(f'<div style="padding:10px 0">{badge_map[state]}</div>', unsafe_allow_html=True)
+                        if dx.button("×", key=f"rm_{key2}", help="Remove"):
+                            st.session_state.na_doc_states[key2] = "—"
+                            st.rerun()
+
+                    elif state == "url_input":
+                        ul, uu, ua, ux = st.columns([2.2, 2.4, 0.45, 0.45])
+                        ul.markdown(f'<div style="display:flex;align-items:center;gap:8px;padding:10px 0"><span style="color:#64748b">☐</span><span style="font-size:13px">{lbl2}</span></div>', unsafe_allow_html=True)
+                        url_val = uu.text_input("", key=f"uv_{key2}", placeholder="https://…", label_visibility="collapsed")
+                        if ua.button("✓", key=f"ua_{key2}", help="Save"):
+                            if url_val.strip():
+                                st.session_state.na_doc_states[key2] = "url"
+                                st.rerun()
+                        if ux.button("×", key=f"uc_{key2}", help="Cancel"):
+                            st.session_state.na_doc_states[key2] = "—"
+                            st.rerun()
+
+                    elif state == "upload_input":
+                        ul2, uu2, ux2 = st.columns([2, 3, 0.45])
+                        ul2.markdown(f'<div style="display:flex;align-items:center;gap:8px;padding:4px 0"><span style="color:#64748b">☐</span><span style="font-size:13px">{lbl2}</span></div>', unsafe_allow_html=True)
+                        uf = uu2.file_uploader("", type=["pdf"], key=f"fu_{key2}", label_visibility="collapsed")
+                        if uf:
+                            st.session_state.na_doc_states[key2] = "uploaded"
+                            st.rerun()
+                        if ux2.button("×", key=f"upc_{key2}", help="Cancel"):
+                            st.session_state.na_doc_states[key2] = "—"
+                            st.rerun()
+
+                    else:  # pending "—"
+                        rl, rb = st.columns([3, 2])
                         rl.markdown(f'<div style="display:flex;align-items:center;gap:10px;padding:6px 0"><span style="color:#64748b">☐</span><span style="font-size:14px">{lbl2}</span></div>', unsafe_allow_html=True)
-                        b1,b2,b3 = rb.columns(3)
-                        b1.button("Upload", key=f"ul_{key2}", use_container_width=True)
-                        b2.button("URL",    key=f"ur_{key2}", use_container_width=True)
-                        b3.button("Skip",   key=f"sk_{key2}", use_container_width=True)
+                        b1, b2, b3 = rb.columns(3)
+                        if b1.button("Upload", key=f"ul_{key2}", use_container_width=True):
+                            st.session_state.na_doc_states[key2] = "upload_input"
+                            st.rerun()
+                        if b2.button("URL", key=f"ur_{key2}", use_container_width=True):
+                            st.session_state.na_doc_states[key2] = "url_input"
+                            st.rerun()
+                        if b3.button("Skip", key=f"sk_{key2}", use_container_width=True):
+                            st.session_state.na_doc_states[key2] = "skipped"
+                            st.rerun()
+
+                    st.markdown('<div style="border-bottom:1px solid #222"></div>', unsafe_allow_html=True)
 
                 st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
                 if resolved >= 4:
-                    _,pb = st.columns([2,1])
+                    _, pb = st.columns([2, 1])
                     with pb:
                         if st.button("Index documents →", type="primary", use_container_width=True):
                             st.session_state.na_step2_done = True
