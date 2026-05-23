@@ -271,7 +271,21 @@ with tab_na:
     base_d    = f"{ticker_d} · {ename_d}" if ename_d else ticker_d
     title_d   = f"{base_d} spinoff from {parent_d}" if parent_d else base_d
 
-    st.markdown(f'<div style="padding:24px 40px 0 40px"><div style="font-size:22px;font-weight:700">{title_d}</div><div style="color:#f59e0b;font-size:13px;margin-top:4px">ⓘ Analysis is marked complete only after all 6 steps and your final invest / watch / reject decision.</div></div><div style="height:16px"></div>', unsafe_allow_html=True)
+    hcol_l, hcol_r = st.columns([3, 1])
+    with hcol_l:
+        st.markdown(f'<div style="padding:24px 40px 0 40px"><div style="font-size:22px;font-weight:700">{title_d}</div><div style="color:#f59e0b;font-size:13px;margin-top:4px">ⓘ Analysis is marked complete only after all 6 steps and your final invest / watch / reject decision.</div></div>', unsafe_allow_html=True)
+    with hcol_r:
+        st.markdown('<div style="padding:24px 40px 0 0;text-align:right">', unsafe_allow_html=True)
+        if st.button("↺ New ticker", key="na_reset"):
+            for k in ["na_step","na_ticker","na_parent_ticker","na_sit_type","na_seed_url",
+                      "na_step1_done","na_validated","na_cik","na_entity_name","na_state",
+                      "na_sic_desc","na_doc_states","na_step2_done","na_ingest_done",
+                      "na_qa_history","na_committee_done","na_scorecard"]:
+                if k in st.session_state:
+                    del st.session_state[k]
+            st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown('<div style="height:16px"></div>', unsafe_allow_html=True)
 
     left, right = st.columns([1, 3], gap="medium")
 
