@@ -20,7 +20,27 @@ def _init_db():
         content TEXT NOT NULL,
         created_at TEXT NOT NULL
     )""")
+    con.execute("""CREATE TABLE IF NOT EXISTS documents (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ticker TEXT NOT NULL,
+        label  TEXT NOT NULL,
+        method TEXT NOT NULL,
+        created_at TEXT NOT NULL
+    )""")
     con.commit(); con.close()
+
+def save_document(ticker: str, label: str, method: str):
+    con = sqlite3.connect(_DB)
+    con.execute("INSERT INTO documents (ticker,label,method,created_at) VALUES (?,?,?,?)",
+                (ticker.upper(), label, method, datetime.utcnow().strftime("%Y-%m-%d %H:%M")))
+    con.commit(); con.close()
+
+def get_documents(ticker: str) -> list:
+    con = sqlite3.connect(_DB)
+    rows = con.execute("SELECT id,label,method,created_at FROM documents WHERE ticker=? ORDER BY created_at ASC",
+                       (ticker.upper(),)).fetchall()
+    con.close()
+    return [{"id":r[0],"label":r[1],"method":r[2],"created_at":r[3]} for r in rows]
 
 def save_note(ticker: str, label: str, content: str):
     con = sqlite3.connect(_DB)
@@ -429,8 +449,11 @@ with tab_na:
                 ec1.markdown('<div style="padding:4px 0"><div style="font-weight:600;font-size:14px">⬇ EDGAR bulk fetch</div><div style="color:#94a3b8;font-size:12px;margin-top:2px">Form 10, 10-K, 10-Q, 8-K, DEF 14A</div></div>', unsafe_allow_html=True)
                 with ec2:
                     if st.button("Fetch from EDGAR ↗", use_container_width=True, key="edgar_fetch"):
-                        st.session_state.na_doc_states["form10"]     = "fetched"
-                        st.session_state.na_doc_states["parent_10k"] = "fetched"
+                        t = st.session_state.na_ticker or "UNKNOWN"
+                        for lbl_e, key_e in REQUIRED_DOCS[:2]:
+                            if st.session_state.na_doc_states[key_e] != "fetched":
+                                st.session_state.na_doc_states[key_e] = "fetched"
+                                save_document(t, lbl_e, "fetched")
                         st.toast("EDGAR fetch complete (placeholder)")
                         st.rerun()
 
@@ -457,6 +480,7 @@ with tab_na:
                         url_val = uu.text_input("", key=f"uv_{key2}", placeholder="https://…", label_visibility="collapsed")
                         if ua.button("✓", key=f"ua_{key2}", help="Save"):
                             if url_val.strip():
+                                save_document(st.session_state.na_ticker or "UNKNOWN", lbl2, "url")
                                 st.session_state.na_doc_states[key2] = "url"
                                 st.rerun()
                         if ux.button("×", key=f"uc_{key2}", help="Cancel"):
@@ -468,6 +492,7 @@ with tab_na:
                         ul2.markdown(f'<div style="display:flex;align-items:center;gap:8px;padding:4px 0"><span style="color:#64748b">☐</span><span style="font-size:13px">{lbl2}</span></div>', unsafe_allow_html=True)
                         uf = uu2.file_uploader("", type=["pdf"], key=f"fu_{key2}", label_visibility="collapsed")
                         if uf:
+                            save_document(st.session_state.na_ticker or "UNKNOWN", lbl2, "uploaded")
                             st.session_state.na_doc_states[key2] = "uploaded"
                             st.rerun()
                         if ux2.button("×", key=f"upc_{key2}", help="Cancel"):
@@ -481,8 +506,9 @@ with tab_na:
                         ta1, ta2, _ = st.columns([1, 1, 4])
                         if ta1.button("Save text", key=f"tsa_{key2}", type="primary", use_container_width=True):
                             if paste_val.strip():
-                                ticker_for_note = st.session_state.na_ticker or "UNKNOWN"
-                                save_note(ticker_for_note, lbl2, paste_val.strip())
+                                t = st.session_state.na_ticker or "UNKNOWN"
+                                save_note(t, lbl2, paste_val.strip())
+                                save_document(t, lbl2, "text")
                                 st.session_state.na_doc_states[key2] = "text"
                                 st.rerun()
                             else:
@@ -505,6 +531,7 @@ with tab_na:
                             st.session_state.na_doc_states[key2] = "text_input"
                             st.rerun()
                         if b4.button("Skip", key=f"sk_{key2}", use_container_width=True):
+                            save_document(st.session_state.na_ticker or "UNKNOWN", lbl2, "skipped")
                             st.session_state.na_doc_states[key2] = "skipped"
                             st.rerun()
 
@@ -738,17 +765,16 @@ with tab_cd:
 
         elif sec == "Documents":
             cd_ticker = st.session_state.na_ticker or "VNTR"
-            doc_states = st.session_state.na_doc_states
-            resolved_docs = [(lbl, k, s) for lbl, k in REQUIRED_DOCS for s in [doc_states.get(k,"—")] if s not in ("—","upload_input","url_input","text_input")]
-            if not resolved_docs:
+            docs = get_documents(cd_ticker)
+            method_badge = {"fetched":'<span class="tag-edgar">EDGAR</span>',"uploaded":'<span class="tag-up">Uploaded</span>',"url":'<span class="tag-up">URL</span>',"text":'<span class="tag-up">Text</span>',"skipped":'<span class="tag-pend">Skipped</span>'}
+            if not docs:
                 st.markdown('<div style="color:#64748b;padding:24px 0">No documents added yet. Complete Step 2 to see the document list here.</div>', unsafe_allow_html=True)
             else:
-                st.markdown(f'<div style="font-weight:600;font-size:15px;margin-bottom:16px">{len(resolved_docs)} document{"s" if len(resolved_docs)!=1 else ""} · {cd_ticker}</div>', unsafe_allow_html=True)
-                method_badge = {"fetched":'<span class="tag-edgar">EDGAR</span>',"uploaded":'<span class="tag-up">Uploaded</span>',"url":'<span class="tag-up">URL</span>',"text":'<span class="tag-up">Text</span>',"skipped":'<span class="tag-pend">Skipped</span>'}
-                for lbl, k, s in resolved_docs:
-                    icon = "✓" if s != "skipped" else "—"
-                    ic   = "#4ade80" if s != "skipped" else "#64748b"
-                    st.markdown(f'<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid #2a2a2a"><div style="display:flex;align-items:center;gap:10px"><span style="color:{ic}">{icon}</span><span style="font-size:14px">{lbl}</span></div>{method_badge.get(s,"")}</div>', unsafe_allow_html=True)
+                st.markdown(f'<div style="font-weight:600;font-size:15px;margin-bottom:16px">{len(docs)} document{"s" if len(docs)!=1 else ""} · {cd_ticker}</div>', unsafe_allow_html=True)
+                for doc in docs:
+                    icon = "✓" if doc["method"] != "skipped" else "—"
+                    ic   = "#4ade80" if doc["method"] != "skipped" else "#64748b"
+                    st.markdown(f'<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid #2a2a2a"><div style="display:flex;align-items:center;gap:10px"><span style="color:{ic}">{icon}</span><span style="font-size:14px">{doc["label"]}</span><span style="color:#64748b;font-size:12px;margin-left:8px">{doc["created_at"]}</span></div>{method_badge.get(doc["method"],"")}</div>', unsafe_allow_html=True)
 
         else:
             st.markdown(f'<div style="color:#64748b;padding:24px 0">{sec} will appear here once a company is fully analysed.</div>', unsafe_allow_html=True)
