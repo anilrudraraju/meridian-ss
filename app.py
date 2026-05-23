@@ -75,12 +75,13 @@ SITUATION_TYPES = [
     "Rights offering","Risk arbitrage","Post-bankruptcy",
 ]
 REQUIRED_DOCS = [
-    ("Form 10 / 10-12B/A",         "form10"),
-    ("Parent 10-K",                  "parent_10k"),
-    ("Investor day / deck",          "investor_deck"),
-    ("Earnings transcript (last)",   "transcript_1"),
-    ("Earnings transcript (prior)",  "transcript_2"),
-    ("Newsletter writeup",           "newsletter"),
+    # (label, state_key, entity)  — entity: "spinoff" | "parent" | "third_party"
+    ("Form 10 / 10-12B/A",         "form10",        "spinoff"),
+    ("Investor day / deck",         "investor_deck", "spinoff"),
+    ("Parent 10-K",                 "parent_10k",    "parent"),
+    ("Earnings transcript (last)",  "transcript_1",  "parent"),
+    ("Earnings transcript (prior)", "transcript_2",  "parent"),
+    ("Newsletter / writeup",        "newsletter",    "third_party"),
 ]
 STEPS = [
     (1,"Intake","30 sec"),
@@ -272,7 +273,7 @@ def _init():
         "na_step":1,"na_ticker":"","na_parent_ticker":"","na_sit_type":"Spinoff",
         "na_seed_url":"","na_step1_done":False,
         "na_validated":False,"na_cik":"","na_entity_name":"","na_state":"","na_sic_desc":"",
-        "na_doc_states":{k:"—" for _,k in REQUIRED_DOCS},
+        "na_doc_states":{k:"—" for _,k,_ in REQUIRED_DOCS},
         "na_edgar_filings":[],"na_step2_done":False,"na_ingest_done":False,"na_qa_history":[],
         "na_committee_done":False,"na_scorecard":None,
         "dj_open":False,"dj_verdict":None,"cd_section":"Overview",
@@ -559,85 +560,100 @@ with tab_na:
                         st.markdown(f'<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid #1e1e1e"><span style="background:{clr}20;color:{clr};border:1px solid {clr}40;border-radius:4px;padding:2px 7px;font-size:11px;font-weight:600;min-width:64px;text-align:center">{f["form"]}</span><a href="{f["url"]}" target="_blank" style="color:#94a3b8;font-size:13px;text-decoration:none;flex:1">{f["date"]} {src}</a><a href="{f["url"]}" target="_blank" style="color:#3b82f6;font-size:12px;text-decoration:none">View ↗</a></div>', unsafe_allow_html=True)
                     st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 
-                st.markdown(f"<div style='height:20px'></div><div style='font-weight:600;margin-bottom:8px'>Checklist · {resolved} of {len(REQUIRED_DOCS)} resolved</div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='height:20px'></div><div style='font-weight:600;margin-bottom:14px'>Checklist · {resolved} of {len(REQUIRED_DOCS)} resolved</div>", unsafe_allow_html=True)
 
-                # ── Per-doc rows ──
-                for lbl2, key2 in REQUIRED_DOCS:
-                    state = st.session_state.na_doc_states[key2]
+                # ── Per-doc rows grouped by entity ──
+                spinco_t  = st.session_state.na_ticker          or "Spinoff"
+                parent_t2 = st.session_state.na_parent_ticker   or "Parent"
+                ENTITY_GROUPS = [
+                    ("spinoff",     f"Spinoff · {spinco_t}",   "#8b5cf6",
+                     "Unlocks: setup quality, index exclusion, float, forced-selling pressure"),
+                    ("parent",      f"Parent · {parent_t2}",   "#3b82f6",
+                     "Unlocks: historical financials, capital structure, valuation multiples"),
+                    ("third_party", "Third party",              "#64748b",
+                     "Unlocks: independent thesis, management credibility flags, comp analysis"),
+                ]
+                for entity_key, grp_label, grp_color, grp_hint in ENTITY_GROUPS:
+                    grp_docs = [(lbl, key) for lbl, key, ent in REQUIRED_DOCS if ent == entity_key]
+                    grp_resolved = sum(1 for _, k in grp_docs if st.session_state.na_doc_states.get(k) in ("fetched","uploaded","url","text"))
+                    st.markdown(f'<div style="display:flex;align-items:baseline;gap:10px;margin:18px 0 4px"><div style="width:3px;height:14px;background:{grp_color};border-radius:2px;flex-shrink:0;margin-top:2px"></div><span style="font-weight:700;font-size:13px;color:{grp_color}">{grp_label}</span><span style="color:#64748b;font-size:12px">{grp_resolved}/{len(grp_docs)} added</span></div><div style="color:#64748b;font-size:12px;margin-bottom:8px;padding-left:13px">{grp_hint}</div>', unsafe_allow_html=True)
 
-                    if state in ("fetched", "uploaded", "url", "text", "skipped"):
-                        badge_map = {"fetched":'<span class="tag-edgar">EDGAR</span>',"uploaded":'<span class="tag-up">Uploaded</span>',"url":'<span class="tag-up">URL</span>',"text":'<span class="tag-up">Text</span>',"skipped":'<span class="tag-pend">Skipped</span>'}
-                        icon = "✓" if state != "skipped" else "—"
-                        ic   = "#4ade80" if state != "skipped" else "#64748b"
-                        dl, dm, dx = st.columns([4, 1.2, 0.4])
-                        dl.markdown(f'<div style="display:flex;align-items:center;gap:10px;padding:10px 0"><span style="color:{ic}">{icon}</span><span style="font-size:14px">{lbl2}</span></div>', unsafe_allow_html=True)
-                        dm.markdown(f'<div style="padding:10px 0">{badge_map[state]}</div>', unsafe_allow_html=True)
-                        if dx.button("×", key=f"rm_{key2}", help="Remove"):
-                            st.session_state.na_doc_states[key2] = "—"
-                            st.rerun()
+                    for lbl2, key2 in grp_docs:
+                        state = st.session_state.na_doc_states[key2]
 
-                    elif state == "url_input":
-                        ul, uu, ua, ux = st.columns([2.2, 2.4, 0.45, 0.45])
-                        ul.markdown(f'<div style="display:flex;align-items:center;gap:8px;padding:10px 0"><span style="color:#64748b">☐</span><span style="font-size:13px">{lbl2}</span></div>', unsafe_allow_html=True)
-                        url_val = uu.text_input("", key=f"uv_{key2}", placeholder="https://…", label_visibility="collapsed")
-                        if ua.button("✓", key=f"ua_{key2}", help="Save"):
-                            if url_val.strip():
-                                save_document(st.session_state.na_ticker or "UNKNOWN", lbl2, "url")
-                                st.session_state.na_doc_states[key2] = "url"
+                        if state in ("fetched", "uploaded", "url", "text", "skipped"):
+                            badge_map = {"fetched":'<span class="tag-edgar">EDGAR</span>',"uploaded":'<span class="tag-up">Uploaded</span>',"url":'<span class="tag-up">URL</span>',"text":'<span class="tag-up">Text</span>',"skipped":'<span class="tag-pend">Skipped</span>'}
+                            icon = "✓" if state != "skipped" else "—"
+                            ic   = "#4ade80" if state != "skipped" else "#64748b"
+                            dl, dm, dx = st.columns([4, 1.2, 0.4])
+                            dl.markdown(f'<div style="display:flex;align-items:center;gap:10px;padding:10px 0"><span style="color:{ic}">{icon}</span><span style="font-size:14px">{lbl2}</span></div>', unsafe_allow_html=True)
+                            dm.markdown(f'<div style="padding:10px 0">{badge_map[state]}</div>', unsafe_allow_html=True)
+                            if dx.button("×", key=f"rm_{key2}", help="Remove"):
+                                st.session_state.na_doc_states[key2] = "—"
                                 st.rerun()
-                        if ux.button("×", key=f"uc_{key2}", help="Cancel"):
-                            st.session_state.na_doc_states[key2] = "—"
-                            st.rerun()
 
-                    elif state == "upload_input":
-                        ul2, uu2, ux2 = st.columns([2, 3, 0.45])
-                        ul2.markdown(f'<div style="display:flex;align-items:center;gap:8px;padding:4px 0"><span style="color:#64748b">☐</span><span style="font-size:13px">{lbl2}</span></div>', unsafe_allow_html=True)
-                        uf = uu2.file_uploader("", type=["pdf"], key=f"fu_{key2}", label_visibility="collapsed")
-                        if uf:
-                            save_document(st.session_state.na_ticker or "UNKNOWN", lbl2, "uploaded")
-                            st.session_state.na_doc_states[key2] = "uploaded"
-                            st.rerun()
-                        if ux2.button("×", key=f"upc_{key2}", help="Cancel"):
-                            st.session_state.na_doc_states[key2] = "—"
-                            st.rerun()
-
-                    elif state == "text_input":
-                        st.markdown(f'<div style="display:flex;align-items:center;gap:8px;padding:6px 0 2px"><span style="color:#64748b">☐</span><span style="font-size:13px;font-weight:600">{lbl2}</span></div>', unsafe_allow_html=True)
-                        st.markdown('<div style="background:#1a2744;border-left:3px solid #3b82f6;border-radius:0 6px 6px 0;padding:8px 12px;margin-bottom:8px;font-size:12px;color:#94a3b8;line-height:1.5">Tables and inline numbers are kept as paragraph-level chunks. Claude Haiku will extract structured financials (EBIT, EBITDA, net debt, ROIC, multiples) from the full text before indexing — chunking does not split mid-table.</div>', unsafe_allow_html=True)
-                        paste_val = st.text_area("", key=f"tv_{key2}", placeholder="Paste the full article, newsletter, or transcript excerpt here…", height=200, label_visibility="collapsed")
-                        ta1, ta2, _ = st.columns([1, 1, 4])
-                        if ta1.button("Save text", key=f"tsa_{key2}", type="primary", use_container_width=True):
-                            if paste_val.strip():
-                                t = st.session_state.na_ticker or "UNKNOWN"
-                                save_note(t, lbl2, paste_val.strip())
-                                save_document(t, lbl2, "text")
-                                st.session_state.na_doc_states[key2] = "text"
+                        elif state == "url_input":
+                            ul, uu, ua, ux = st.columns([2.2, 2.4, 0.45, 0.45])
+                            ul.markdown(f'<div style="display:flex;align-items:center;gap:8px;padding:10px 0"><span style="color:#64748b">☐</span><span style="font-size:13px">{lbl2}</span></div>', unsafe_allow_html=True)
+                            url_val = uu.text_input("", key=f"uv_{key2}", placeholder="https://…", label_visibility="collapsed")
+                            if ua.button("✓", key=f"ua_{key2}", help="Save"):
+                                if url_val.strip():
+                                    save_document(st.session_state.na_ticker or "UNKNOWN", lbl2, "url")
+                                    st.session_state.na_doc_states[key2] = "url"
+                                    st.rerun()
+                            if ux.button("×", key=f"uc_{key2}", help="Cancel"):
+                                st.session_state.na_doc_states[key2] = "—"
                                 st.rerun()
-                            else:
-                                st.warning("Paste some text first.")
-                        if ta2.button("Cancel", key=f"tca_{key2}", use_container_width=True):
-                            st.session_state.na_doc_states[key2] = "—"
-                            st.rerun()
 
-                    else:  # pending "—"
-                        rl, rb = st.columns([3, 2.6])
-                        rl.markdown(f'<div style="display:flex;align-items:center;gap:10px;padding:6px 0"><span style="color:#64748b">☐</span><span style="font-size:14px">{lbl2}</span></div>', unsafe_allow_html=True)
-                        b1, b2, b3, b4 = rb.columns(4)
-                        if b1.button("Upload", key=f"ul_{key2}", use_container_width=True):
-                            st.session_state.na_doc_states[key2] = "upload_input"
-                            st.rerun()
-                        if b2.button("URL", key=f"ur_{key2}", use_container_width=True):
-                            st.session_state.na_doc_states[key2] = "url_input"
-                            st.rerun()
-                        if b3.button("Text", key=f"ut_{key2}", use_container_width=True):
-                            st.session_state.na_doc_states[key2] = "text_input"
-                            st.rerun()
-                        if b4.button("Skip", key=f"sk_{key2}", use_container_width=True):
-                            save_document(st.session_state.na_ticker or "UNKNOWN", lbl2, "skipped")
-                            st.session_state.na_doc_states[key2] = "skipped"
-                            st.rerun()
+                        elif state == "upload_input":
+                            ul2, uu2, ux2 = st.columns([2, 3, 0.45])
+                            ul2.markdown(f'<div style="display:flex;align-items:center;gap:8px;padding:4px 0"><span style="color:#64748b">☐</span><span style="font-size:13px">{lbl2}</span></div>', unsafe_allow_html=True)
+                            uf = uu2.file_uploader("", type=["pdf"], key=f"fu_{key2}", label_visibility="collapsed")
+                            if uf:
+                                save_document(st.session_state.na_ticker or "UNKNOWN", lbl2, "uploaded")
+                                st.session_state.na_doc_states[key2] = "uploaded"
+                                st.rerun()
+                            if ux2.button("×", key=f"upc_{key2}", help="Cancel"):
+                                st.session_state.na_doc_states[key2] = "—"
+                                st.rerun()
 
-                    st.markdown('<div style="border-bottom:1px solid #222"></div>', unsafe_allow_html=True)
+                        elif state == "text_input":
+                            st.markdown(f'<div style="display:flex;align-items:center;gap:8px;padding:6px 0 2px"><span style="color:#64748b">☐</span><span style="font-size:13px;font-weight:600">{lbl2}</span></div>', unsafe_allow_html=True)
+                            st.markdown('<div style="background:#1a2744;border-left:3px solid #3b82f6;border-radius:0 6px 6px 0;padding:8px 12px;margin-bottom:8px;font-size:12px;color:#94a3b8;line-height:1.5">Tables and inline numbers are kept as paragraph-level chunks. Claude Haiku will extract structured financials (EBIT, EBITDA, net debt, ROIC, multiples) from the full text before indexing — chunking does not split mid-table.</div>', unsafe_allow_html=True)
+                            paste_val = st.text_area("", key=f"tv_{key2}", placeholder="Paste the full article, newsletter, or transcript excerpt here…", height=200, label_visibility="collapsed")
+                            ta1, ta2, _ = st.columns([1, 1, 4])
+                            if ta1.button("Save text", key=f"tsa_{key2}", type="primary", use_container_width=True):
+                                if paste_val.strip():
+                                    t = st.session_state.na_ticker or "UNKNOWN"
+                                    save_note(t, lbl2, paste_val.strip())
+                                    save_document(t, lbl2, "text")
+                                    st.session_state.na_doc_states[key2] = "text"
+                                    st.rerun()
+                                else:
+                                    st.warning("Paste some text first.")
+                            if ta2.button("Cancel", key=f"tca_{key2}", use_container_width=True):
+                                st.session_state.na_doc_states[key2] = "—"
+                                st.rerun()
+
+                        else:  # pending "—"
+                            rl, rb = st.columns([3, 2.6])
+                            rl.markdown(f'<div style="display:flex;align-items:center;gap:10px;padding:6px 0"><span style="color:#64748b">☐</span><span style="font-size:14px">{lbl2}</span></div>', unsafe_allow_html=True)
+                            b1, b2, b3, b4 = rb.columns(4)
+                            if b1.button("Upload", key=f"ul_{key2}", use_container_width=True):
+                                st.session_state.na_doc_states[key2] = "upload_input"
+                                st.rerun()
+                            if b2.button("URL", key=f"ur_{key2}", use_container_width=True):
+                                st.session_state.na_doc_states[key2] = "url_input"
+                                st.rerun()
+                            if b3.button("Text", key=f"ut_{key2}", use_container_width=True):
+                                st.session_state.na_doc_states[key2] = "text_input"
+                                st.rerun()
+                            if b4.button("Skip", key=f"sk_{key2}", use_container_width=True):
+                                save_document(st.session_state.na_ticker or "UNKNOWN", lbl2, "skipped")
+                                st.session_state.na_doc_states[key2] = "skipped"
+                                st.rerun()
+
+                        st.markdown('<div style="border-bottom:1px solid #1e1e1e"></div>', unsafe_allow_html=True)
 
                 st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
                 if resolved < 4:
@@ -879,9 +895,16 @@ with tab_cd:
                     else:
                         icon_html = '<span style="color:#3a3a3a;font-size:13px">○</span>'
                         val_html  = '<span style="color:#3a3a3a;font-size:13px">—</span>'
-                        # Show which doc(s) would unlock this
-                        doc_labels = {k: lbl for lbl,k in REQUIRED_DOCS}
-                        needed = " or ".join(doc_labels.get(k, k) for k in req_keys if k in doc_labels)
+                        doc_meta  = {k: (lbl, ent) for lbl,k,ent in REQUIRED_DOCS}
+                        cov_spinco = st.session_state.na_ticker or "spinoff"
+                        cov_parent = st.session_state.na_parent_ticker or "parent"
+                        ent_label  = {"spinoff": cov_spinco, "parent": cov_parent, "third_party": "3rd party"}
+                        parts = []
+                        for k in req_keys:
+                            if k in doc_meta:
+                                lbl_d, ent_d = doc_meta[k]
+                                parts.append(f"{lbl_d} <span style='color:#64748b'>({ent_label.get(ent_d,'')})</span>")
+                        needed   = " or ".join(parts) if parts else "relevant document"
                         src_html = f'<span style="color:#f59e0b;font-size:12px">→ add {needed}</span>'
                         row_bg   = ""
                     st.markdown(f'<div style="display:grid;grid-template-columns:160px 1fr 1fr;align-items:center;padding:9px 10px;border-radius:6px;margin-bottom:2px;{row_bg}"><div style="display:flex;align-items:center;gap:8px">{icon_html}<span style="font-size:13px;color:#94a3b8">{metric}</span></div><div>{val_html}</div><div>{src_html}</div></div>', unsafe_allow_html=True)
