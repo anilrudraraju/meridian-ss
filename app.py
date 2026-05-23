@@ -90,36 +90,49 @@ STEPS = [
     (5,"Committee","4 min"),
     (6,"Memo","review"),
 ]
+# Greenblatt 35-criterion scorecard — 7 per dimension
 # Each entry: (dimension, dim_color, metric, value_when_available, required_doc_keys, source_label)
 COVERAGE_FIELDS = [
-    # Setup
-    ("Setup","#8b5cf6","Market cap",           "$3.5B",              ["form10"],                   "Form 10 cover page"),
-    ("Setup","#8b5cf6","Index exclusion",       "Yes — below $4.2B Russell threshold", ["form10"], "Form 10 §Risk factors"),
-    ("Setup","#8b5cf6","Free float",            "57% (post-distribution)",["form10"],              "Form 10 §Capitalization"),
-    ("Setup","#8b5cf6","Forced selling est.",   "~$180M over 30 days", ["form10","parent_10k"],    "Index fund rebalance model"),
-    ("Setup","#8b5cf6","Spin record date",      "TBD",                ["form10"],                  "Form 10 §Distribution"),
-    # Business quality
-    ("Business","#3b82f6","ROIC",               "15.8%",              ["parent_10k"],              "10-K Note 12"),
-    ("Business","#3b82f6","FCF conversion",     "78%",                ["parent_10k"],              "10-K cash flow statement"),
-    ("Business","#3b82f6","Revenue growth (3yr)","2.1% CAGR",         ["parent_10k"],              "10-K segment revenue"),
-    ("Business","#3b82f6","Gross margin trend", "Deteriorating −180bps",["parent_10k","transcript_1"],"10-Q vs 10-K"),
-    ("Business","#3b82f6","Competitive moat",   "Moderate — 3 of 5",  ["investor_deck","transcript_1"],"Mgmt commentary"),
-    # Capital structure
-    ("Capital","#f59e0b","Net debt",            "$1.2B",              ["parent_10k"],              "10-K balance sheet"),
-    ("Capital","#f59e0b","Net debt / EBITDA",   "3.1x",               ["parent_10k"],              "10-K balance sheet"),
-    ("Capital","#f59e0b","Pension liability",   "$340M (underfunded)", ["parent_10k"],              "10-K Note 14"),
-    ("Capital","#f59e0b","Debt maturity wall",  "2027 ($450M)",        ["parent_10k"],              "10-K Note 9"),
-    ("Capital","#f59e0b","Interest coverage",   "3.8x",               ["parent_10k"],              "10-K income statement"),
-    # Valuation
-    ("Valuation","#10b981","EV / EBIT",         "9x (peer median 15x)",["parent_10k"],             "Derived from 10-K"),
-    ("Valuation","#10b981","P / FCF",           "7.2x",               ["parent_10k"],              "Post-div market cap"),
-    ("Valuation","#10b981","Dividend yield",    "5.6% (pro forma)",   ["parent_10k","newsletter"], "Assuming $0.88 annual"),
-    ("Valuation","#10b981","Sum-of-parts upside","38–72%",             ["investor_deck","newsletter"],"Mgmt deck + writeup"),
-    # Incentives
-    ("Incentives","#ec4899","CEO ownership",    "2.1% of shares",      ["newsletter"],             "Newsletter / proxy"),
-    ("Incentives","#ec4899","Mgmt comp mix",    "70% equity-linked",   ["newsletter"],             "Newsletter / proxy"),
-    ("Incentives","#ec4899","Buyback auth.",    "$500M (17% of float)",["transcript_1","newsletter"],"Earnings call"),
-    ("Incentives","#ec4899","Insider buying",   "None disclosed",      ["newsletter"],             "Newsletter / proxy"),
+    # ── Setup (7) ──
+    ("Setup","#8b5cf6","Market cap",              "$3.5B",                       ["form10"],                        "Form 10 cover page"),
+    ("Setup","#8b5cf6","Index exclusion",          "Yes — below $4.2B Russell",   ["form10"],                        "Form 10 §Risk factors"),
+    ("Setup","#8b5cf6","Free float post-spin",     "57% of shares outstanding",   ["form10"],                        "Form 10 §Capitalization"),
+    ("Setup","#8b5cf6","Forced selling estimate",  "~$180M over 30 days",         ["form10","parent_10k"],           "Index fund rebalance model"),
+    ("Setup","#8b5cf6","Institutional ownership",  "34% (pre-spin)",              ["form10"],                        "Form 10 §Security ownership"),
+    ("Setup","#8b5cf6","Parent strategic rationale","Clean separation — stated",   ["form10","investor_deck"],        "Form 10 §Background"),
+    ("Setup","#8b5cf6","Spin record / ex-date",    "TBD",                         ["form10"],                        "Form 10 §Distribution"),
+    # ── Business quality (7) ──
+    ("Business","#3b82f6","ROIC",                  "15.8%",                       ["parent_10k"],                    "10-K Note 12"),
+    ("Business","#3b82f6","FCF conversion",         "78%",                         ["parent_10k"],                    "10-K cash flow statement"),
+    ("Business","#3b82f6","Revenue growth (3yr)",   "2.1% CAGR",                   ["parent_10k"],                    "10-K segment revenue"),
+    ("Business","#3b82f6","Gross margin trend",     "Deteriorating −180bps",        ["parent_10k","transcript_1"],     "10-Q vs prior 10-K"),
+    ("Business","#3b82f6","Competitive moat",       "Moderate — 3 of 5",           ["investor_deck","transcript_1"],  "Mgmt commentary"),
+    ("Business","#3b82f6","Customer concentration", "Top 10 = 38% of revenue",     ["parent_10k"],                    "10-K §Risk factors"),
+    ("Business","#3b82f6","Operating leverage",     "High — 62% fixed cost base",  ["parent_10k","transcript_1"],     "10-K cost structure"),
+    # ── Capital structure (7) ──
+    ("Capital","#f59e0b","Net debt",                "$1.2B",                       ["parent_10k"],                    "10-K balance sheet"),
+    ("Capital","#f59e0b","Net debt / EBITDA",        "3.1x",                        ["parent_10k"],                    "10-K balance sheet + P&L"),
+    ("Capital","#f59e0b","Pension / OPEB liability", "$340M underfunded",           ["parent_10k"],                    "10-K Note 14"),
+    ("Capital","#f59e0b","Debt maturity wall",        "2027 — $450M due",            ["parent_10k"],                    "10-K Note 9"),
+    ("Capital","#f59e0b","Interest coverage",         "3.8x EBIT / interest",        ["parent_10k"],                    "10-K income statement"),
+    ("Capital","#f59e0b","Off-balance-sheet items",  "Operating leases $120M",      ["parent_10k"],                    "10-K Note 11"),
+    ("Capital","#f59e0b","Capex intensity",           "6.2% of revenue (maint.)",    ["parent_10k","transcript_1"],     "10-K cash flow + mgmt guide"),
+    # ── Valuation (7) ──
+    ("Valuation","#10b981","EV / EBIT",              "9x (peer median 15x)",        ["parent_10k"],                    "Derived from 10-K"),
+    ("Valuation","#10b981","EV / EBITDA",             "6.4x (peer median 11x)",      ["parent_10k"],                    "Derived from 10-K"),
+    ("Valuation","#10b981","P / FCF",                 "7.2x post-dividend mkt cap",  ["parent_10k"],                    "Derived from 10-K"),
+    ("Valuation","#10b981","Dividend yield",           "5.6% pro forma",              ["parent_10k","newsletter"],       "Assuming $0.88 annual div"),
+    ("Valuation","#10b981","Sum-of-parts upside",      "38–72% to fair value",        ["investor_deck","newsletter"],    "Mgmt deck + writeup"),
+    ("Valuation","#10b981","Private market value",     "~$22–28 per share",           ["investor_deck","newsletter"],    "Newsletter comp analysis"),
+    ("Valuation","#10b981","Mgmt guide vs consensus",  "In-line — no upside baked",   ["transcript_1","transcript_2"],   "Earnings call commentary"),
+    # ── Incentives (7) ──
+    ("Incentives","#ec4899","CEO ownership %",         "2.1% of shares out.",         ["newsletter"],                    "Newsletter / DEF 14A"),
+    ("Incentives","#ec4899","Mgmt comp structure",      "70% equity-linked LTI",       ["newsletter"],                    "Newsletter / DEF 14A"),
+    ("Incentives","#ec4899","Share buyback auth.",      "$500M — 17% of float",        ["transcript_1","newsletter"],     "Earnings call + press release"),
+    ("Incentives","#ec4899","Insider buying post-spin", "None disclosed yet",          ["newsletter"],                    "Newsletter / Form 4 watch"),
+    ("Incentives","#ec4899","Parent CEO role at spinco","No — new independent CEO",    ["form10","newsletter"],           "Form 10 §Management"),
+    ("Incentives","#ec4899","Option vesting conditions","3yr cliff + performance",     ["newsletter"],                    "Newsletter / DEF 14A"),
+    ("Incentives","#ec4899","Stated cap. allocation",   "Debt paydown then buybacks",  ["transcript_1","investor_deck"],  "Earnings call §capital alloc"),
 ]
 
 AGENTS = [
