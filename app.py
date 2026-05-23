@@ -228,7 +228,7 @@ def _init():
         "na_seed_url":"","na_step1_done":False,
         "na_validated":False,"na_cik":"","na_entity_name":"","na_state":"","na_sic_desc":"",
         "na_doc_states":{k:"—" for _,k in REQUIRED_DOCS},
-        "na_step2_done":False,"na_ingest_done":False,"na_qa_history":[],
+        "na_edgar_filings":[],"na_step2_done":False,"na_ingest_done":False,"na_qa_history":[],
         "na_committee_done":False,"na_scorecard":None,
         "dj_open":False,"dj_verdict":None,"cd_section":"Overview",
     }
@@ -268,6 +268,34 @@ def _edgar_lookup(ticker: str):
                 "sic_desc": sub.get("sicDescription",""), "state": sub.get("stateOfIncorporation","")}
     except Exception:
         return {"cik": cik, "name": match["title"], "sic_desc": "", "state": ""}
+
+_EDGAR_FORMS = {"10-12B","10-12B/A","S-1","10-K","10-Q","8-K","DEF 14A"}
+_FORM_LIMIT   = {"10-K":2,"10-Q":3,"8-K":4,"DEF 14A":1,"10-12B":2,"10-12B/A":2,"S-1":1}
+
+@st.cache_data(ttl=1800)
+def _fetch_edgar_filings(cik: str) -> list:
+    import urllib.request, json
+    hdrs = {"User-Agent": "meridian-ss research@meridian-ss.app"}
+    try:
+        req = urllib.request.Request(f"https://data.sec.gov/submissions/CIK{cik.zfill(10)}.json", headers=hdrs)
+        with urllib.request.urlopen(req, timeout=15) as r:
+            sub = json.loads(r.read())
+    except Exception:
+        return []
+    recent   = sub.get("filings", {}).get("recent", {})
+    forms    = recent.get("form", [])
+    dates    = recent.get("filingDate", [])
+    accnos   = recent.get("accessionNumber", [])
+    primdocs = recent.get("primaryDocument", [])
+    seen, results = {}, []
+    for i, form in enumerate(forms):
+        if form not in _EDGAR_FORMS: continue
+        if seen.get(form, 0) >= _FORM_LIMIT.get(form, 1): continue
+        seen[form] = seen.get(form, 0) + 1
+        acc = accnos[i].replace("-", "")
+        results.append({"form": form, "date": dates[i],
+                        "url": f"https://www.sec.gov/Archives/edgar/data/{cik}/{acc}/{primdocs[i]}"})
+    return results
 
 PAD = "padding:28px 40px;"
 
@@ -334,8 +362,8 @@ with tab_na:
         if st.button("↺ New ticker", key="na_reset"):
             for k in ["na_step","na_ticker","na_parent_ticker","na_sit_type","na_seed_url",
                       "na_step1_done","na_validated","na_cik","na_entity_name","na_state",
-                      "na_sic_desc","na_doc_states","na_step2_done","na_ingest_done",
-                      "na_qa_history","na_committee_done","na_scorecard"]:
+                      "na_sic_desc","na_doc_states","na_edgar_filings","na_step2_done",
+                      "na_ingest_done","na_qa_history","na_committee_done","na_scorecard"]:
                 if k in st.session_state:
                     del st.session_state[k]
             st.rerun()
@@ -446,16 +474,45 @@ with tab_na:
 
                 # ── Bulk EDGAR fetch ──
                 ec1, ec2 = st.columns([3, 1])
-                ec1.markdown('<div style="padding:4px 0"><div style="font-weight:600;font-size:14px">⬇ EDGAR bulk fetch</div><div style="color:#94a3b8;font-size:12px;margin-top:2px">Form 10, 10-K, 10-Q, 8-K, DEF 14A</div></div>', unsafe_allow_html=True)
+                ec1.markdown('<div style="padding:4px 0"><div style="font-weight:600;font-size:14px">⬇ EDGAR bulk fetch</div><div style="color:#94a3b8;font-size:12px;margin-top:2px">Form 10 / 10-12B, 10-K, 10-Q, 8-K, DEF 14A</div></div>', unsafe_allow_html=True)
                 with ec2:
-                    if st.button("Fetch from EDGAR ↗", use_container_width=True, key="edgar_fetch"):
-                        t = st.session_state.na_ticker or "UNKNOWN"
-                        for lbl_e, key_e in REQUIRED_DOCS[:2]:
-                            if st.session_state.na_doc_states[key_e] != "fetched":
-                                st.session_state.na_doc_states[key_e] = "fetched"
-                                save_document(t, lbl_e, "fetched")
-                        st.toast("EDGAR fetch complete (placeholder)")
+                    if not st.session_state.na_cik:
+                        st.markdown('<div style="color:#f59e0b;font-size:12px;padding:4px 0">Validate ticker in Step 1 first.</div>', unsafe_allow_html=True)
+                    elif st.button("Fetch from EDGAR ↗", use_container_width=True, key="edgar_fetch"):
+                        t = st.session_state.na_ticker
+                        all_filings = []
+                        with st.spinner("Fetching from SEC EDGAR…"):
+                            filings = _fetch_edgar_filings(st.session_state.na_cik)
+                            for f in filings: f["source"] = t
+                            all_filings.extend(filings)
+                            if st.session_state.na_parent_ticker:
+                                pe = _edgar_lookup(st.session_state.na_parent_ticker)
+                                if pe:
+                                    pf = _fetch_edgar_filings(pe["cik"])
+                                    for f in pf: f["source"] = st.session_state.na_parent_ticker
+                                    all_filings.extend(pf)
+                        st.session_state.na_edgar_filings = all_filings
+                        spinco_forms = {f["form"] for f in all_filings if f["source"] == t}
+                        parent_forms = {f["form"] for f in all_filings if f["source"] != t}
+                        if spinco_forms & {"10-12B","10-12B/A","S-1","10-K"}:
+                            if st.session_state.na_doc_states["form10"] != "fetched":
+                                st.session_state.na_doc_states["form10"] = "fetched"
+                                save_document(t, "Form 10 / 10-12B/A", "fetched")
+                        if "10-K" in parent_forms or "10-K" in spinco_forms:
+                            if st.session_state.na_doc_states["parent_10k"] != "fetched":
+                                st.session_state.na_doc_states["parent_10k"] = "fetched"
+                                save_document(t, "Parent 10-K", "fetched")
                         st.rerun()
+
+                # ── Show fetched filings ──
+                if st.session_state.na_edgar_filings:
+                    badge_form = {"10-12B":"#8b5cf6","10-12B/A":"#8b5cf6","S-1":"#8b5cf6","10-K":"#3b82f6","10-Q":"#0ea5e9","8-K":"#64748b","DEF 14A":"#f59e0b"}
+                    st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
+                    for f in st.session_state.na_edgar_filings:
+                        clr = badge_form.get(f["form"],"#64748b")
+                        src = f"· {f['source']}" if f.get("source") else ""
+                        st.markdown(f'<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid #1e1e1e"><span style="background:{clr}20;color:{clr};border:1px solid {clr}40;border-radius:4px;padding:2px 7px;font-size:11px;font-weight:600;min-width:64px;text-align:center">{f["form"]}</span><a href="{f["url"]}" target="_blank" style="color:#94a3b8;font-size:13px;text-decoration:none;flex:1">{f["date"]} {src}</a><a href="{f["url"]}" target="_blank" style="color:#3b82f6;font-size:12px;text-decoration:none">View ↗</a></div>', unsafe_allow_html=True)
+                    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 
                 st.markdown(f"<div style='height:20px'></div><div style='font-weight:600;margin-bottom:8px'>Checklist · {resolved} of {len(REQUIRED_DOCS)} resolved</div>", unsafe_allow_html=True)
 
@@ -538,15 +595,14 @@ with tab_na:
                     st.markdown('<div style="border-bottom:1px solid #222"></div>', unsafe_allow_html=True)
 
                 st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
-                if resolved >= 4:
-                    _, pb = st.columns([2, 1])
-                    with pb:
-                        if st.button("Index documents →", type="primary", use_container_width=True):
-                            st.session_state.na_step2_done = True
-                            st.session_state.na_step       = 3
-                            st.rerun()
-                else:
-                    st.warning(f"{resolved} / {len(REQUIRED_DOCS)} resolved — need at least 4 to continue.")
+                if resolved < 4:
+                    st.markdown(f'<div style="color:#f59e0b;font-size:13px;margin-bottom:12px">ⓘ {resolved} of {len(REQUIRED_DOCS)} documents added — more documents improve analysis quality.</div>', unsafe_allow_html=True)
+                _, pb = st.columns([2, 1])
+                with pb:
+                    if st.button("Index documents →", type="primary", use_container_width=True):
+                        st.session_state.na_step2_done = True
+                        st.session_state.na_step       = 3
+                        st.rerun()
 
             # STEP 3
             elif cur == 3:
