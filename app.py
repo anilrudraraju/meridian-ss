@@ -188,7 +188,7 @@ def sc(s):
     return "#22c55e" if s>=75 else "#f59e0b" if s>=55 else "#ef4444"
 
 def _docs_resolved():
-    return sum(1 for v in st.session_state.na_doc_states.values() if v in ("fetched","uploaded","url"))
+    return sum(1 for v in st.session_state.na_doc_states.values() if v in ("fetched","uploaded","url","text"))
 
 @st.cache_data(ttl=3600)
 def _edgar_lookup(ticker: str):
@@ -405,8 +405,8 @@ with tab_na:
                 for lbl2, key2 in REQUIRED_DOCS:
                     state = st.session_state.na_doc_states[key2]
 
-                    if state in ("fetched", "uploaded", "url", "skipped"):
-                        badge_map = {"fetched":'<span class="tag-edgar">EDGAR</span>',"uploaded":'<span class="tag-up">Uploaded</span>',"url":'<span class="tag-up">URL</span>',"skipped":'<span class="tag-pend">Skipped</span>'}
+                    if state in ("fetched", "uploaded", "url", "text", "skipped"):
+                        badge_map = {"fetched":'<span class="tag-edgar">EDGAR</span>',"uploaded":'<span class="tag-up">Uploaded</span>',"url":'<span class="tag-up">URL</span>',"text":'<span class="tag-up">Text</span>',"skipped":'<span class="tag-pend">Skipped</span>'}
                         icon = "✓" if state != "skipped" else "—"
                         ic   = "#4ade80" if state != "skipped" else "#64748b"
                         dl, dm, dx = st.columns([4, 1.2, 0.4])
@@ -439,17 +439,35 @@ with tab_na:
                             st.session_state.na_doc_states[key2] = "—"
                             st.rerun()
 
+                    elif state == "text_input":
+                        st.markdown(f'<div style="display:flex;align-items:center;gap:8px;padding:6px 0 2px"><span style="color:#64748b">☐</span><span style="font-size:13px;font-weight:600">{lbl2}</span></div>', unsafe_allow_html=True)
+                        st.markdown('<div style="background:#1a2744;border-left:3px solid #3b82f6;border-radius:0 6px 6px 0;padding:8px 12px;margin-bottom:8px;font-size:12px;color:#94a3b8;line-height:1.5">Tables and inline numbers are kept as paragraph-level chunks. Claude Haiku will extract structured financials (EBIT, EBITDA, net debt, ROIC, multiples) from the full text before indexing — chunking does not split mid-table.</div>', unsafe_allow_html=True)
+                        paste_val = st.text_area("", key=f"tv_{key2}", placeholder="Paste the full article, newsletter, or transcript excerpt here…", height=200, label_visibility="collapsed")
+                        ta1, ta2, _ = st.columns([1, 1, 4])
+                        if ta1.button("Save text", key=f"tsa_{key2}", type="primary", use_container_width=True):
+                            if paste_val.strip():
+                                st.session_state.na_doc_states[key2] = "text"
+                                st.rerun()
+                            else:
+                                st.warning("Paste some text first.")
+                        if ta2.button("Cancel", key=f"tca_{key2}", use_container_width=True):
+                            st.session_state.na_doc_states[key2] = "—"
+                            st.rerun()
+
                     else:  # pending "—"
-                        rl, rb = st.columns([3, 2])
+                        rl, rb = st.columns([3, 2.6])
                         rl.markdown(f'<div style="display:flex;align-items:center;gap:10px;padding:6px 0"><span style="color:#64748b">☐</span><span style="font-size:14px">{lbl2}</span></div>', unsafe_allow_html=True)
-                        b1, b2, b3 = rb.columns(3)
+                        b1, b2, b3, b4 = rb.columns(4)
                         if b1.button("Upload", key=f"ul_{key2}", use_container_width=True):
                             st.session_state.na_doc_states[key2] = "upload_input"
                             st.rerun()
                         if b2.button("URL", key=f"ur_{key2}", use_container_width=True):
                             st.session_state.na_doc_states[key2] = "url_input"
                             st.rerun()
-                        if b3.button("Skip", key=f"sk_{key2}", use_container_width=True):
+                        if b3.button("Text", key=f"ut_{key2}", use_container_width=True):
+                            st.session_state.na_doc_states[key2] = "text_input"
+                            st.rerun()
+                        if b4.button("Skip", key=f"sk_{key2}", use_container_width=True):
                             st.session_state.na_doc_states[key2] = "skipped"
                             st.rerun()
 
