@@ -38,12 +38,32 @@ The core user flow is a wizard controlled by `st.session_state.na_step` (1–6):
 
 ### Planned backend (from inline TODOs)
 
-- **SEC EDGAR**: ticker → CIK validation; filing fetches (Form 10, 10-K, 10-Q, 8-K, DEF 14A)
-- **Ingestion pipeline**: LlamaParse PDF extraction → `LangChain MarkdownHeaderTextSplitter` (H1–H3) → OpenAI ada-002 embeddings → Chroma per-situation collection (`meridian_ss_{situation_id}`) + BM25 (`rank-bm25`)
-- **Financial pre-extraction**: Claude Haiku extracts EBIT, EBITDA, net debt, ROIC components
-- **InvestmentCommittee**: 5 agents — Setup Specialist, Business Quality Analyst, Capital Structure Analyst, Valuation Analyst, Devil's Advocate — debating in 3 rounds via a MessageBus. Sonnet 4.6 × 4 agents + Opus 4.7 × Devil's Advocate
+- **SEC EDGAR**: ticker → CIK validation; HTML filing fetches (Form 10, 10-K, 10-Q, 8-K, DEF 14A); XBRL company facts for structured financial data
+
+- **Ingestion pipeline — per document type**:
+
+  | Document | Source format | Parsing | Financial numbers |
+  |---|---|---|---|
+  | Form 10 / 10-12B | HTML (EDGAR or manual URL) | BeautifulSoup section split on H-tags | Haiku sidecar (no XBRL on registration statements) |
+  | Parent 10-K / 10-Q | HTML (EDGAR or manual URL) | BeautifulSoup section split | XBRL company facts API (primary); Haiku for non-XBRL gaps (pension, adjusted EBITDA) |
+  | Investor day deck | PDF upload | LlamaParse → section split | Haiku for projection tables |
+  | Earnings transcript | Text paste or URL | Paragraph-level split (Q&A blocks intact) | Vector index only |
+  | Newsletter / writeup | Text paste, URL, or PDF | Paragraph-level split | Vector index only |
+
+  All chunks → OpenAI ada-002 embeddings → Chroma (`meridian_ss_{situation_id}`) + BM25 (`rank-bm25`) hybrid retrieval.
+
+  HTML chunking uses `MarkdownHeaderTextSplitter` after BeautifulSoup extraction, with a `RecursiveCharacterTextSplitter` (1,200 token max, 150 overlap) fallback for oversized sections.
+
+- **XBRL sidecar**: `data.sec.gov/api/xbrl/companyfacts/CIK{n}.json` → structured JSON of all GAAP-tagged metrics. Stored in SQLite alongside situation. Committee agents query this directly — no vector search for standard financial numbers.
+
+- **Haiku sidecar**: Narrow scope — targeted at specific HTML sections that XBRL doesn't cover (Form 10 distribution/capitalization sections, pension footnotes, debt maturity schedules, adjusted EBITDA definitions). One Haiku call per section, not per document.
+
+- **InvestmentCommittee**: 5 agents — Setup Specialist, Business Quality Analyst, Capital Structure Analyst, Valuation Analyst, Devil's Advocate — debating in 3 rounds via a MessageBus. Sonnet 4.6 × 4 agents + Opus 4.7 × Devil's Advocate. Agents use XBRL sidecar for numbers + vector retrieval for qualitative context.
+
 - **Memo generation**: Claude Opus 4.7 producing a structured 8-section memo
-- **Persistence**: SQLite for `decision_logs` rows and `Situation.status`
+
+- **Persistence**: SQLite (`meridian.db`) for `notes`, `documents`, `decision_logs`, XBRL sidecar, Haiku sidecar, and `Situation.status`
+
 - **Tendency Coach**: behavioral pattern detection (#SetupParalysis, #AnalysisParalysis, etc.) displayed before decisions on re-runs
 
 ### Session state keys

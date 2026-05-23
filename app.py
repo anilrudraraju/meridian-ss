@@ -75,13 +75,15 @@ SITUATION_TYPES = [
     "Rights offering","Risk arbitrage","Post-bankruptcy",
 ]
 REQUIRED_DOCS = [
-    # (label, state_key, entity)  — entity: "spinoff" | "parent" | "third_party"
-    ("Form 10 / 10-12B/A",         "form10",        "spinoff"),
-    ("Investor day / deck",         "investor_deck", "spinoff"),
-    ("Parent 10-K",                 "parent_10k",    "parent"),
-    ("Earnings transcript (last)",  "transcript_1",  "parent"),
-    ("Earnings transcript (prior)", "transcript_2",  "parent"),
-    ("Newsletter / writeup",        "newsletter",    "third_party"),
+    # (label, state_key, entity, methods)
+    # methods: subset of "edgar","url","upload","text"
+    # "url" for SEC filings = HTML link (auto-fetch or manually entered)
+    ("Form 10 / 10-12B/A",         "form10",        "spinoff",     ["edgar","url"]),
+    ("Investor day / deck",         "investor_deck", "spinoff",     ["upload"]),
+    ("Parent 10-K",                 "parent_10k",    "parent",      ["edgar","url"]),
+    ("Earnings transcript (last)",  "transcript_1",  "parent",      ["text","url"]),
+    ("Earnings transcript (prior)", "transcript_2",  "parent",      ["text","url"]),
+    ("Newsletter / writeup",        "newsletter",    "third_party", ["text","url","upload"]),
 ]
 STEPS = [
     (1,"Intake","30 sec"),
@@ -273,7 +275,7 @@ def _init():
         "na_step":1,"na_ticker":"","na_parent_ticker":"","na_sit_type":"Spinoff",
         "na_seed_url":"","na_step1_done":False,
         "na_validated":False,"na_cik":"","na_entity_name":"","na_state":"","na_sic_desc":"",
-        "na_doc_states":{k:"—" for _,k,_ in REQUIRED_DOCS},
+        "na_doc_states":{k:"—" for _,k,_,_ in REQUIRED_DOCS},
         "na_edgar_filings":[],"na_step2_done":False,"na_ingest_done":False,"na_qa_history":[],
         "na_committee_done":False,"na_scorecard":None,
         "dj_open":False,"dj_verdict":None,"cd_section":"Overview",
@@ -574,15 +576,15 @@ with tab_na:
                      "Unlocks: independent thesis, management credibility flags, comp analysis"),
                 ]
                 for entity_key, grp_label, grp_color, grp_hint in ENTITY_GROUPS:
-                    grp_docs = [(lbl, key) for lbl, key, ent in REQUIRED_DOCS if ent == entity_key]
-                    grp_resolved = sum(1 for _, k in grp_docs if st.session_state.na_doc_states.get(k) in ("fetched","uploaded","url","text"))
+                    grp_docs = [(lbl, key, mth) for lbl, key, ent, mth in REQUIRED_DOCS if ent == entity_key]
+                    grp_resolved = sum(1 for _,k,_ in grp_docs if st.session_state.na_doc_states.get(k) in ("fetched","uploaded","url","text"))
                     st.markdown(f'<div style="display:flex;align-items:baseline;gap:10px;margin:18px 0 4px"><div style="width:3px;height:14px;background:{grp_color};border-radius:2px;flex-shrink:0;margin-top:2px"></div><span style="font-weight:700;font-size:13px;color:{grp_color}">{grp_label}</span><span style="color:#64748b;font-size:12px">{grp_resolved}/{len(grp_docs)} added</span></div><div style="color:#64748b;font-size:12px;margin-bottom:8px;padding-left:13px">{grp_hint}</div>', unsafe_allow_html=True)
 
-                    for lbl2, key2 in grp_docs:
+                    for lbl2, key2, methods2 in grp_docs:
                         state = st.session_state.na_doc_states[key2]
 
                         if state in ("fetched", "uploaded", "url", "text", "skipped"):
-                            badge_map = {"fetched":'<span class="tag-edgar">EDGAR</span>',"uploaded":'<span class="tag-up">Uploaded</span>',"url":'<span class="tag-up">URL</span>',"text":'<span class="tag-up">Text</span>',"skipped":'<span class="tag-pend">Skipped</span>'}
+                            badge_map = {"fetched":'<span class="tag-edgar">EDGAR</span>',"uploaded":'<span class="tag-up">Uploaded</span>',"url":'<span class="tag-up">HTML link</span>',"text":'<span class="tag-up">Text</span>',"skipped":'<span class="tag-pend">Skipped</span>'}
                             icon = "✓" if state != "skipped" else "—"
                             ic   = "#4ade80" if state != "skipped" else "#64748b"
                             dl, dm, dx = st.columns([4, 1.2, 0.4])
@@ -593,9 +595,11 @@ with tab_na:
                                 st.rerun()
 
                         elif state == "url_input":
+                            is_html = "edgar" in methods2 or (len(methods2)==1 and "url" in methods2)
+                            ph = "https://www.sec.gov/Archives/… (HTML filing link)" if is_html else "https://…"
                             ul, uu, ua, ux = st.columns([2.2, 2.4, 0.45, 0.45])
                             ul.markdown(f'<div style="display:flex;align-items:center;gap:8px;padding:10px 0"><span style="color:#64748b">☐</span><span style="font-size:13px">{lbl2}</span></div>', unsafe_allow_html=True)
-                            url_val = uu.text_input("", key=f"uv_{key2}", placeholder="https://…", label_visibility="collapsed")
+                            url_val = uu.text_input("", key=f"uv_{key2}", placeholder=ph, label_visibility="collapsed")
                             if ua.button("✓", key=f"ua_{key2}", help="Save"):
                                 if url_val.strip():
                                     save_document(st.session_state.na_ticker or "UNKNOWN", lbl2, "url")
@@ -619,8 +623,8 @@ with tab_na:
 
                         elif state == "text_input":
                             st.markdown(f'<div style="display:flex;align-items:center;gap:8px;padding:6px 0 2px"><span style="color:#64748b">☐</span><span style="font-size:13px;font-weight:600">{lbl2}</span></div>', unsafe_allow_html=True)
-                            st.markdown('<div style="background:#1a2744;border-left:3px solid #3b82f6;border-radius:0 6px 6px 0;padding:8px 12px;margin-bottom:8px;font-size:12px;color:#94a3b8;line-height:1.5">Tables and inline numbers are kept as paragraph-level chunks. Claude Haiku will extract structured financials (EBIT, EBITDA, net debt, ROIC, multiples) from the full text before indexing — chunking does not split mid-table.</div>', unsafe_allow_html=True)
-                            paste_val = st.text_area("", key=f"tv_{key2}", placeholder="Paste the full article, newsletter, or transcript excerpt here…", height=200, label_visibility="collapsed")
+                            st.markdown('<div style="background:#1a2744;border-left:3px solid #3b82f6;border-radius:0 6px 6px 0;padding:8px 12px;margin-bottom:8px;font-size:12px;color:#94a3b8;line-height:1.5">Saved as a note for this company. Tables and numbers stay intact as paragraph-level chunks; Haiku extracts structured financials before indexing.</div>', unsafe_allow_html=True)
+                            paste_val = st.text_area("", key=f"tv_{key2}", placeholder="Paste the full transcript, newsletter, or article text here…", height=200, label_visibility="collapsed")
                             ta1, ta2, _ = st.columns([1, 1, 4])
                             if ta1.button("Save text", key=f"tsa_{key2}", type="primary", use_container_width=True):
                                 if paste_val.strip():
@@ -636,19 +640,19 @@ with tab_na:
                                 st.rerun()
 
                         else:  # pending "—"
-                            rl, rb = st.columns([3, 2.6])
+                            rl, rb = st.columns([3, max(1.0, len(methods2)*0.75)])
                             rl.markdown(f'<div style="display:flex;align-items:center;gap:10px;padding:6px 0"><span style="color:#64748b">☐</span><span style="font-size:14px">{lbl2}</span></div>', unsafe_allow_html=True)
-                            b1, b2, b3, b4 = rb.columns(4)
-                            if b1.button("Upload", key=f"ul_{key2}", use_container_width=True):
-                                st.session_state.na_doc_states[key2] = "upload_input"
-                                st.rerun()
-                            if b2.button("URL", key=f"ur_{key2}", use_container_width=True):
-                                st.session_state.na_doc_states[key2] = "url_input"
-                                st.rerun()
-                            if b3.button("Text", key=f"ut_{key2}", use_container_width=True):
-                                st.session_state.na_doc_states[key2] = "text_input"
-                                st.rerun()
-                            if b4.button("Skip", key=f"sk_{key2}", use_container_width=True):
+                            btn_cols = rb.columns(len(methods2) + 1)  # +1 for Skip
+                            btn_labels = {"edgar":"EDGAR","url":"HTML link","upload":"Upload PDF","text":"Paste text"}
+                            for i, m in enumerate(methods2):
+                                if btn_cols[i].button(btn_labels[m], key=f"m_{m}_{key2}", use_container_width=True):
+                                    if m == "edgar":
+                                        # Individual EDGAR fetch for this doc
+                                        st.session_state.na_doc_states[key2] = "url_input"
+                                    else:
+                                        st.session_state.na_doc_states[key2] = f"{m}_input" if m in ("upload","text") else "url_input"
+                                    st.rerun()
+                            if btn_cols[-1].button("Skip", key=f"sk_{key2}", use_container_width=True):
                                 save_document(st.session_state.na_ticker or "UNKNOWN", lbl2, "skipped")
                                 st.session_state.na_doc_states[key2] = "skipped"
                                 st.rerun()
@@ -895,7 +899,7 @@ with tab_cd:
                     else:
                         icon_html = '<span style="color:#3a3a3a;font-size:13px">○</span>'
                         val_html  = '<span style="color:#3a3a3a;font-size:13px">—</span>'
-                        doc_meta  = {k: (lbl, ent) for lbl,k,ent in REQUIRED_DOCS}
+                        doc_meta  = {k: (lbl, ent) for lbl,k,ent,_ in REQUIRED_DOCS}
                         cov_spinco = st.session_state.na_ticker or "spinoff"
                         cov_parent = st.session_state.na_parent_ticker or "parent"
                         ent_label  = {"spinoff": cov_spinco, "parent": cov_parent, "third_party": "3rd party"}
