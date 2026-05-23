@@ -4,8 +4,43 @@ v3: st.tabs() nav, compact HTML, dark theme
 """
 
 import os
+import sqlite3
 from datetime import datetime
 import streamlit as st
+
+# ── SQLite persistence ─────────────────────────────────────────────────────────
+_DB = "meridian.db"
+
+def _init_db():
+    con = sqlite3.connect(_DB)
+    con.execute("""CREATE TABLE IF NOT EXISTS notes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ticker TEXT NOT NULL,
+        label  TEXT NOT NULL,
+        content TEXT NOT NULL,
+        created_at TEXT NOT NULL
+    )""")
+    con.commit(); con.close()
+
+def save_note(ticker: str, label: str, content: str):
+    con = sqlite3.connect(_DB)
+    con.execute("INSERT INTO notes (ticker,label,content,created_at) VALUES (?,?,?,?)",
+                (ticker.upper(), label, content, datetime.utcnow().strftime("%Y-%m-%d %H:%M")))
+    con.commit(); con.close()
+
+def get_notes(ticker: str) -> list:
+    con = sqlite3.connect(_DB)
+    rows = con.execute("SELECT id,label,content,created_at FROM notes WHERE ticker=? ORDER BY created_at DESC",
+                       (ticker.upper(),)).fetchall()
+    con.close()
+    return [{"id":r[0],"label":r[1],"content":r[2],"created_at":r[3]} for r in rows]
+
+def delete_note(note_id: int):
+    con = sqlite3.connect(_DB)
+    con.execute("DELETE FROM notes WHERE id=?", (note_id,))
+    con.commit(); con.close()
+
+_init_db()
 
 st.set_page_config(
     page_title="Meridian-SS",
@@ -446,6 +481,8 @@ with tab_na:
                         ta1, ta2, _ = st.columns([1, 1, 4])
                         if ta1.button("Save text", key=f"tsa_{key2}", type="primary", use_container_width=True):
                             if paste_val.strip():
+                                ticker_for_note = st.session_state.na_ticker or "UNKNOWN"
+                                save_note(ticker_for_note, lbl2, paste_val.strip())
                                 st.session_state.na_doc_states[key2] = "text"
                                 st.rerun()
                             else:
@@ -680,6 +717,39 @@ with tab_cd:
             st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
             st.markdown("<div style='font-weight:600;font-size:16px;margin-bottom:12px'>Business quality detail</div>", unsafe_allow_html=True)
             st.markdown('<div style="background:#2a2a2a;border-radius:10px;padding:20px 24px"><div style="display:grid;grid-template-columns:repeat(5,1fr);gap:16px"><div><div style="color:#94a3b8;font-size:12px;margin-bottom:4px">ROIC</div><div style="font-size:20px;font-weight:700">15.8%</div></div><div><div style="color:#94a3b8;font-size:12px;margin-bottom:4px">Growth</div><div style="font-size:20px;font-weight:700">2.1%</div></div><div><div style="color:#94a3b8;font-size:12px;margin-bottom:4px">FCF conv.</div><div style="font-size:20px;font-weight:700">78%</div></div><div><div style="color:#94a3b8;font-size:12px;margin-bottom:4px">Margin</div><div style="font-size:18px;font-weight:700;color:#f59e0b">Deteriorating</div></div><div><div style="color:#94a3b8;font-size:12px;margin-bottom:4px">Durability</div><div style="font-size:20px;font-weight:700">3 / 5</div></div></div></div>', unsafe_allow_html=True)
+        elif sec == "Notes":
+            cd_ticker = st.session_state.na_ticker or "VNTR"
+            notes = get_notes(cd_ticker)
+            if not notes:
+                st.markdown('<div style="color:#64748b;padding:24px 0">No notes yet. Paste article or newsletter text in Step 2 to save notes here.</div>', unsafe_allow_html=True)
+            else:
+                st.markdown(f'<div style="font-weight:600;font-size:15px;margin-bottom:16px">{len(notes)} note{"s" if len(notes)!=1 else ""} · {cd_ticker}</div>', unsafe_allow_html=True)
+                for note in notes:
+                    preview = note["content"][:320] + ("…" if len(note["content"]) > 320 else "")
+                    with st.container(border=True):
+                        nh, nx = st.columns([4, 0.4])
+                        nh.markdown(f'<div style="font-weight:600;font-size:13px">{note["label"]}</div><div style="color:#64748b;font-size:12px;margin-top:2px">{note["created_at"]} UTC</div>', unsafe_allow_html=True)
+                        if nx.button("×", key=f"del_note_{note['id']}", help="Delete note"):
+                            delete_note(note["id"])
+                            st.rerun()
+                        st.markdown(f'<div style="font-size:13px;color:#94a3b8;line-height:1.6;margin-top:10px;white-space:pre-wrap">{preview}</div>', unsafe_allow_html=True)
+                        with st.expander("Show full text"):
+                            st.markdown(f'<div style="font-size:13px;line-height:1.7;white-space:pre-wrap">{note["content"]}</div>', unsafe_allow_html=True)
+
+        elif sec == "Documents":
+            cd_ticker = st.session_state.na_ticker or "VNTR"
+            doc_states = st.session_state.na_doc_states
+            resolved_docs = [(lbl, k, s) for lbl, k in REQUIRED_DOCS for s in [doc_states.get(k,"—")] if s not in ("—","upload_input","url_input","text_input")]
+            if not resolved_docs:
+                st.markdown('<div style="color:#64748b;padding:24px 0">No documents added yet. Complete Step 2 to see the document list here.</div>', unsafe_allow_html=True)
+            else:
+                st.markdown(f'<div style="font-weight:600;font-size:15px;margin-bottom:16px">{len(resolved_docs)} document{"s" if len(resolved_docs)!=1 else ""} · {cd_ticker}</div>', unsafe_allow_html=True)
+                method_badge = {"fetched":'<span class="tag-edgar">EDGAR</span>',"uploaded":'<span class="tag-up">Uploaded</span>',"url":'<span class="tag-up">URL</span>',"text":'<span class="tag-up">Text</span>',"skipped":'<span class="tag-pend">Skipped</span>'}
+                for lbl, k, s in resolved_docs:
+                    icon = "✓" if s != "skipped" else "—"
+                    ic   = "#4ade80" if s != "skipped" else "#64748b"
+                    st.markdown(f'<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid #2a2a2a"><div style="display:flex;align-items:center;gap:10px"><span style="color:{ic}">{icon}</span><span style="font-size:14px">{lbl}</span></div>{method_badge.get(s,"")}</div>', unsafe_allow_html=True)
+
         else:
             st.markdown(f'<div style="color:#64748b;padding:24px 0">{sec} will appear here once a company is fully analysed.</div>', unsafe_allow_html=True)
 
