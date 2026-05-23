@@ -99,7 +99,7 @@ p,span,div,h1,h2,h3,h4,label{color:#f1f5f9;}
 .stime{font-size:11px;color:#64748b;margin-top:1px;}
 
 /* ── Step card (st.container border wrapper) ── */
-[data-testid="stVerticalBlockBorderWrapper"]{background:#262626!important;border-radius:14px!important;border:1px solid #2e2e2e!important;}
+[data-testid="stVerticalBlockBorderWrapper"]{background:#262626!important;border-radius:14px!important;border:1px solid #2e2e2e!important;padding:28px 32px!important;}
 .stitle{font-size:22px;font-weight:700;margin-bottom:4px;color:#f1f5f9;}
 .ssub{color:#94a3b8;font-size:14px;margin-bottom:20px;}
 
@@ -171,6 +171,7 @@ def _init():
     defaults = {
         "na_step":1,"na_ticker":"","na_parent_ticker":"","na_sit_type":"Spinoff",
         "na_seed_url":"","na_step1_done":False,
+        "na_validated":False,"na_cik":"","na_entity_name":"","na_state":"","na_sic_desc":"",
         "na_doc_states":{k:"—" for _,k in REQUIRED_DOCS},
         "na_step2_done":False,"na_ingest_done":False,"na_qa_history":[],
         "na_committee_done":False,"na_scorecard":None,
@@ -188,6 +189,30 @@ def sc(s):
 
 def _docs_resolved():
     return sum(1 for v in st.session_state.na_doc_states.values() if v in ("fetched","uploaded","url"))
+
+@st.cache_data(ttl=3600)
+def _edgar_lookup(ticker: str):
+    import urllib.request, json
+    ticker = ticker.upper().strip()
+    hdrs = {"User-Agent": "meridian-ss research@meridian-ss.app"}
+    try:
+        req = urllib.request.Request("https://www.sec.gov/files/company_tickers.json", headers=hdrs)
+        with urllib.request.urlopen(req, timeout=12) as r:
+            data = json.loads(r.read())
+    except Exception:
+        return None
+    match = next((v for v in data.values() if v.get("ticker","").upper() == ticker), None)
+    if not match:
+        return None
+    cik = str(match["cik_str"])
+    try:
+        req2 = urllib.request.Request(f"https://data.sec.gov/submissions/CIK{cik.zfill(10)}.json", headers=hdrs)
+        with urllib.request.urlopen(req2, timeout=12) as r2:
+            sub = json.loads(r2.read())
+        return {"cik": cik, "name": sub.get("name", match["title"]),
+                "sic_desc": sub.get("sicDescription",""), "state": sub.get("stateOfIncorporation","")}
+    except Exception:
+        return {"cik": cik, "name": match["title"], "sic_desc": "", "state": ""}
 
 PAD = "padding:28px 40px;"
 
@@ -240,9 +265,11 @@ with tab_d:
 # NEW ANALYSIS
 # ══════════════════════════════════════════════════════════════════════════════
 with tab_na:
-    ticker_d = st.session_state.na_ticker or "New situation"
-    parent_d = st.session_state.na_parent_ticker
-    title_d  = f"{ticker_d} spinoff from {parent_d}" if parent_d else ticker_d
+    ticker_d  = st.session_state.na_ticker or "New situation"
+    parent_d  = st.session_state.na_parent_ticker
+    ename_d   = st.session_state.na_entity_name
+    base_d    = f"{ticker_d} · {ename_d}" if ename_d else ticker_d
+    title_d   = f"{base_d} spinoff from {parent_d}" if parent_d else base_d
 
     st.markdown(f'<div style="padding:24px 40px 0 40px"><div style="font-size:22px;font-weight:700">{title_d}</div><div style="color:#f59e0b;font-size:13px;margin-top:4px">ⓘ Analysis is marked complete only after all 6 steps and your final invest / watch / reject decision.</div></div><div style="height:16px"></div>', unsafe_allow_html=True)
 
@@ -282,26 +309,66 @@ with tab_na:
 
             # STEP 1
             if cur == 1:
-                st.markdown('<div class="stitle">Step 1 · Intake</div><div class="ssub">Validates ticker on EDGAR, fetches entity record, links parent/spinco.</div>', unsafe_allow_html=True)
-                with st.form("intake_form"):
-                    fc1,fc2 = st.columns(2)
-                    with fc1: ticker_in = st.text_input("Ticker", value=st.session_state.na_ticker, placeholder="LUMN")
-                    with fc2: sit_in    = st.selectbox("Situation type", SITUATION_TYPES, index=SITUATION_TYPES.index(st.session_state.na_sit_type))
-                    parent_in = st.text_input("Parent ticker (auto-detected)", value=st.session_state.na_parent_ticker, placeholder="CTL")
-                    seed_in   = st.text_input("Optional · newsletter or article URL (seed thesis)", value=st.session_state.na_seed_url, placeholder="https://...")
-                    _,bc = st.columns([2,1])
-                    with bc: sub = st.form_submit_button("Validate and continue →", type="primary", use_container_width=True)
-                    if sub:
+                st.markdown('<div class="stitle">Step 1 · Intake</div><div class="ssub">Enter the spinoff ticker — we\'ll validate it on SEC EDGAR and pull the entity record.</div>', unsafe_allow_html=True)
+
+                fc1, fc2 = st.columns(2)
+                with fc1:
+                    ticker_in = st.text_input("Spinoff ticker *", value=st.session_state.na_ticker, placeholder="LUMN")
+                with fc2:
+                    sit_in = st.selectbox("Situation type *", SITUATION_TYPES, index=SITUATION_TYPES.index(st.session_state.na_sit_type))
+                parent_in = st.text_input("Parent ticker", value=st.session_state.na_parent_ticker, placeholder="CTL — auto-detected when possible")
+                seed_in   = st.text_input("Seed URL (optional)", value=st.session_state.na_seed_url, placeholder="https://newsletter.com/writeup…")
+
+                # Entity card — shown after a successful validation
+                if st.session_state.na_validated:
+                    st.markdown(
+                        f'<div style="background:#0f2d1f;border:1px solid #166534;border-radius:10px;padding:16px 20px;margin:14px 0">'
+                        f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">'
+                        f'<span style="color:#4ade80;font-size:15px">✓</span>'
+                        f'<span style="font-weight:700;font-size:14px;color:#4ade80">Validated on SEC EDGAR</span>'
+                        f'</div>'
+                        f'<div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:14px">'
+                        f'<div><div style="color:#64748b;font-size:11px;margin-bottom:3px">COMPANY NAME</div><div style="font-size:14px;font-weight:600">{st.session_state.na_entity_name}</div></div>'
+                        f'<div><div style="color:#64748b;font-size:11px;margin-bottom:3px">CIK</div><div style="font-size:14px;font-weight:600">{st.session_state.na_cik}</div></div>'
+                        f'<div><div style="color:#64748b;font-size:11px;margin-bottom:3px">STATE</div><div style="font-size:14px;font-weight:600">{st.session_state.na_state or "—"}</div></div>'
+                        f'<div><div style="color:#64748b;font-size:11px;margin-bottom:3px">SECTOR</div><div style="font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{st.session_state.na_sic_desc or "—"}</div></div>'
+                        f'</div></div>',
+                        unsafe_allow_html=True
+                    )
+
+                st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+                _, bc = st.columns([2, 1])
+                with bc:
+                    already_ok = (st.session_state.na_validated
+                                  and ticker_in.strip().upper() == st.session_state.na_ticker)
+                    btn_label = "Continue →" if already_ok else "Validate on EDGAR →"
+                    if st.button(btn_label, type="primary", use_container_width=True, key="s1_go"):
                         if not ticker_in.strip():
                             st.error("Ticker is required.")
-                        else:
-                            st.session_state.na_ticker        = ticker_in.strip().upper()
+                        elif already_ok:
                             st.session_state.na_sit_type      = sit_in
                             st.session_state.na_parent_ticker = parent_in.strip().upper()
                             st.session_state.na_seed_url      = seed_in.strip()
-                            st.session_state.na_step1_done    = True
                             st.session_state.na_step          = 2
                             st.rerun()
+                        else:
+                            with st.spinner(f"Looking up {ticker_in.upper()} on EDGAR…"):
+                                entity = _edgar_lookup(ticker_in.strip())
+                            if entity is None:
+                                st.error(f"**{ticker_in.upper()}** not found on SEC EDGAR. Check the ticker spelling — EDGAR uses the exchange ticker (e.g. `LUMN` not `LU`).")
+                            else:
+                                st.session_state.na_ticker        = ticker_in.strip().upper()
+                                st.session_state.na_sit_type      = sit_in
+                                st.session_state.na_parent_ticker = parent_in.strip().upper()
+                                st.session_state.na_seed_url      = seed_in.strip()
+                                st.session_state.na_cik           = entity["cik"]
+                                st.session_state.na_entity_name   = entity["name"]
+                                st.session_state.na_state         = entity.get("state","")
+                                st.session_state.na_sic_desc      = entity.get("sic_desc","")
+                                st.session_state.na_validated     = True
+                                st.session_state.na_step1_done    = True
+                                st.session_state.na_step          = 2
+                                st.rerun()
 
             # STEP 2
             elif cur == 2:
