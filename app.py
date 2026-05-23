@@ -98,8 +98,8 @@ p,span,div,h1,h2,h3,h4,label{color:#f1f5f9;}
 .sname-dim{color:#64748b;}
 .stime{font-size:11px;color:#64748b;margin-top:1px;}
 
-/* ── Step card ── */
-.stepcard{background:#262626;border-radius:14px;padding:28px 32px;min-height:400px;}
+/* ── Step card (st.container border wrapper) ── */
+[data-testid="stVerticalBlockBorderWrapper"]{background:#262626!important;border-radius:14px!important;border:1px solid #2e2e2e!important;}
 .stitle{font-size:22px;font-weight:700;margin-bottom:4px;color:#f1f5f9;}
 .ssub{color:#94a3b8;font-size:14px;margin-bottom:20px;}
 
@@ -274,215 +274,206 @@ with tab_na:
                 ncls   = "sname sname-dim"
             row_cls = "active" if is_cur else ""
             st.markdown(f'<div class="srow {row_cls}">{circle}<div><div class="{ncls}">{label}</div><div class="stime">{est}</div></div></div>', unsafe_allow_html=True)
-            if not is_done and not is_cur:
-                pass
-            else:
-                if st.button(label, key=f"sn_{n}", use_container_width=True):
-                    st.session_state.na_step = n
-                    st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
 
     # ── Step content ───────────────────────────────────────────────────────────
     with right:
-        st.markdown('<div style="padding-right:40px"><div class="stepcard">', unsafe_allow_html=True)
+        with st.container(border=True):
 
-        # STEP 1
-        if cur == 1:
-            st.markdown('<div class="stitle">Step 1 · Intake</div><div class="ssub">Validates ticker on EDGAR, fetches entity record, links parent/spinco.</div>', unsafe_allow_html=True)
-            with st.form("intake_form"):
-                fc1,fc2 = st.columns(2)
-                with fc1: ticker_in = st.text_input("Ticker", value=st.session_state.na_ticker, placeholder="LUMN")
-                with fc2: sit_in    = st.selectbox("Situation type", SITUATION_TYPES, index=SITUATION_TYPES.index(st.session_state.na_sit_type))
-                parent_in = st.text_input("Parent ticker (auto-detected)", value=st.session_state.na_parent_ticker, placeholder="CTL")
-                seed_in   = st.text_input("Optional · newsletter or article URL (seed thesis)", value=st.session_state.na_seed_url, placeholder="https://...")
-                _,bc = st.columns([2,1])
-                with bc: sub = st.form_submit_button("Validate and continue →", type="primary", use_container_width=True)
-                if sub:
-                    if not ticker_in.strip():
-                        st.error("Ticker is required.")
-                    else:
-                        st.session_state.na_ticker        = ticker_in.strip().upper()
-                        st.session_state.na_sit_type      = sit_in
-                        st.session_state.na_parent_ticker = parent_in.strip().upper()
-                        st.session_state.na_seed_url      = seed_in.strip()
-                        st.session_state.na_step1_done    = True
-                        st.session_state.na_step          = 2
-                        st.rerun()
-
-        # STEP 2
-        elif cur == 2:
-            resolved = _docs_resolved()
-            st.markdown(f'<div class="stitle">Step 2 · Documents</div><div class="ssub">Add documents three ways: EDGAR auto-fetch, PDF upload, or URL paste.</div>', unsafe_allow_html=True)
-            mc1,mc2,mc3 = st.columns(3)
-            with mc1:
-                st.markdown('<div class="mcard"><div class="mcardtitle">⬇ EDGAR fetch</div><div class="mcarddesc">Form 10, 10-K, 10-Q, 8-K, DEF 14A</div></div>', unsafe_allow_html=True)
-                if st.button("Fetch ↗", key="edgar_fetch", use_container_width=True):
-                    st.session_state.na_doc_states["form10"]     = "fetched"
-                    st.session_state.na_doc_states["parent_10k"] = "fetched"
-                    st.toast("EDGAR fetch complete (placeholder)")
-                    st.rerun()
-            with mc2:
-                st.markdown('<div class="mcard"><div class="mcardtitle">⬆ Upload PDF</div><div class="mcarddesc">Decks, paywalled writeups</div></div>', unsafe_allow_html=True)
-                up = st.file_uploader("", accept_multiple_files=True, type=["pdf"], key="doc_upload", label_visibility="collapsed")
-                if up:
-                    st.session_state.na_doc_states["investor_deck"] = "uploaded"
-                    st.rerun()
-            with mc3:
-                st.markdown('<div class="mcard"><div class="mcardtitle">🔗 Paste URL</div><div class="mcarddesc">Newsletters, transcripts, articles</div></div>', unsafe_allow_html=True)
-                purl = st.text_input("", key="paste_url", placeholder="https://...", label_visibility="collapsed")
-                if purl and st.button("Add", key="add_url"):
-                    st.session_state.na_doc_states["newsletter"] = "url"
-                    st.rerun()
-
-            st.markdown(f"<div style='height:16px'></div><div style='font-weight:600;margin-bottom:10px'>Checklist · {resolved} of {len(REQUIRED_DOCS)} resolved</div>", unsafe_allow_html=True)
-
-            for label, key in REQUIRED_DOCS:
-                state = st.session_state.na_doc_states[key]
-                if state == "fetched":
-                    st.markdown(f'<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid #222"><div style="display:flex;align-items:center;gap:10px"><span style="color:#4ade80">✓</span><span style="font-size:14px">{label}</span></div><span class="tag-edgar">EDGAR</span></div>', unsafe_allow_html=True)
-                elif state == "uploaded":
-                    st.markdown(f'<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid #222"><div style="display:flex;align-items:center;gap:10px"><span style="color:#4ade80">✓</span><span style="font-size:14px">{label}</span></div><span class="tag-up">Uploaded</span></div>', unsafe_allow_html=True)
-                elif state == "url":
-                    st.markdown(f'<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid #222"><div style="display:flex;align-items:center;gap:10px"><span style="color:#4ade80">✓</span><span style="font-size:14px">{label}</span></div><span class="tag-up">URL</span></div>', unsafe_allow_html=True)
-                else:
-                    rl,rb = st.columns([3,2])
-                    rl.markdown(f'<div style="display:flex;align-items:center;gap:10px;padding:6px 0"><span style="color:#64748b">☐</span><span style="font-size:14px">{label}</span></div>', unsafe_allow_html=True)
-                    b1,b2,b3 = rb.columns(3)
-                    b1.button("Upload", key=f"ul_{key}", use_container_width=True)
-                    b2.button("URL",    key=f"ur_{key}", use_container_width=True)
-                    b3.button("Skip",   key=f"sk_{key}", use_container_width=True)
-
-            st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
-            if resolved >= 4:
-                _,pb = st.columns([2,1])
-                with pb:
-                    if st.button("Index documents →", type="primary", use_container_width=True):
-                        st.session_state.na_step2_done = True
-                        st.session_state.na_step       = 3
-                        st.rerun()
-            else:
-                st.warning(f"{resolved} / {len(REQUIRED_DOCS)} resolved — need at least 4 to continue.")
-
-        # STEP 3
-        elif cur == 3:
-            st.markdown('<div class="stitle">Step 3 · Ingest</div><div class="ssub">LlamaParse + markdown chunking + hybrid retrieval. Failures highlighted in red.</div>', unsafe_allow_html=True)
-            if not st.session_state.na_ingest_done:
-                if st.button("▶  Run ingestion", type="primary"):
-                    import time
-                    with st.spinner("Running ingestion pipeline…"):
-                        time.sleep(1)
-                    st.session_state.na_ingest_done = True
-                    st.rerun()
-            else:
-                for lbl, ok, timing in [
-                    ("Parsing PDFs · 5 of 5 · 1,847 pages", True,  "42s"),
-                    ("Markdown chunking · 3,201 chunks",     True,  "18s"),
-                    ("Hybrid index · BM25 + embeddings",     True,  "31s"),
-                    ("Newsletter URL · 403 forbidden",       False, None),
-                    ("Pre-extracted financials",              True,  "22s"),
-                ]:
-                    if ok:
-                        st.markdown(f'<div class="irow"><div><span class="ick">✓</span>{lbl}</div><span class="itime">{timing}</span></div>', unsafe_allow_html=True)
-                    else:
-                        st.markdown('<div class="ierr"><div style="font-weight:600">⚠ Newsletter URL · 403 forbidden</div><div style="color:#f8717180;font-size:12px;margin-top:2px">Paywalled. Retry or upload PDF.</div></div>', unsafe_allow_html=True)
-                        _,ec1,ec2,_2 = st.columns([3,1,1,2])
-                        ec1.button("Retry",  key="ir")
-                        ec2.button("Upload", key="iu")
-                _,pb = st.columns([2,1])
-                with pb:
-                    if st.button("Explore the corpus →", type="primary", use_container_width=True):
-                        st.session_state.na_step = 4
-                        st.rerun()
-
-        # STEP 4
-        elif cur == 4:
-            st.markdown('<div class="stitle">Step 4 · Explore</div><div class="ssub">Grounded Q&A with save-to-notes and tags.</div>', unsafe_allow_html=True)
-            for i, entry in enumerate(st.session_state.na_qa_history):
-                st.markdown(f'<div class="chatq"><div class="av av-u">👤</div><span style="font-size:14px">{entry["q"]}</span></div><div class="chata"><div style="display:flex;align-items:flex-start;gap:10px"><div class="av av-m">M</div><div><div style="font-size:14px;line-height:1.6;margin-bottom:8px">{entry["a"]}</div><div><span class="ctag">Form 10 p. 87</span><span class="ctag">Q1 transcript</span><span class="ctag">10-K note 14</span></div></div></div></div>', unsafe_allow_html=True)
-                sa,ta,da,_ = st.columns([1,1,1,3])
-                sa.button("🔖 Save",       key=f"sv_{i}")
-                ta.button("🏷 #pension",   key=f"tg_{i}")
-                da.button("🔍 Dig deeper", key=f"dg_{i}")
-            st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
-            qi,rb = st.columns([4,1])
-            with qi: q = st.text_input("", placeholder="Ask another question...", key="qa_input", label_visibility="collapsed")
-            with rb:
-                if st.button("Run committee →", type="primary", use_container_width=True):
-                    st.session_state.na_step = 5
-                    st.rerun()
-            if q and st.button("Ask", key="ask_q"):
-                st.session_state.na_qa_history.append({"q":q,"a":"$1.2B net debt (3.1x EBITDA). Form 10 p. 87: $340M pension liability. CFO declined to quantify funding shortfall on Q1 call.","saved":False})
-                st.rerun()
-
-        # STEP 5
-        elif cur == 5:
-            st.markdown('<div class="stitle">Step 5 · Committee</div><div class="ssub">5 agents debate the Greenblatt scorecard.</div>', unsafe_allow_html=True)
-            if not st.session_state.na_committee_done:
-                if st.button("▶  Convene committee", type="primary"):
-                    import time
-                    with st.spinner("Agents debating…"):
-                        time.sleep(2)
-                    st.session_state.na_scorecard = {"setup":82,"business":84,"capital":65,"valuation":80,"incentives":78,"composite":78}
-                    st.session_state.na_committee_done = True
-                    st.rerun()
-            else:
-                for letter,role,color,score,summary in AGENTS:
-                    s_str = f" · {score}" if score else ""
-                    st.markdown(f'<div class="agrow"><div class="agav" style="background:{color}30;color:{color}">{letter}</div><div><div style="font-weight:600;font-size:14px">{role}{s_str}</div><div style="color:#94a3b8;font-size:13px;margin-top:2px">{summary}</div></div></div>', unsafe_allow_html=True)
-                st.markdown('<p style="color:#64748b;font-size:13px;margin-top:4px">+ Valuation and Incentives agents weighing in…</p>', unsafe_allow_html=True)
-                _,pb = st.columns([2,1])
-                with pb:
-                    if st.button("View memo →", type="primary", use_container_width=True):
-                        st.session_state.na_step = 6
-                        st.rerun()
-
-        # STEP 6
-        elif cur == 6:
-            sc_d = st.session_state.na_scorecard
-            comp = sc_d["composite"] if sc_d else "—"
-            st.markdown(f'<div class="stitle">Step 6 · Memo and decision</div><div class="ssub">Composite {comp}/100. Click Approve / Watch / Reject.</div>', unsafe_allow_html=True)
-            if sc_d:
-                st.markdown('<div style="background:#2a2a2a;border-radius:10px;padding:16px;margin-bottom:16px"><div style="font-weight:600;font-size:14px;margin-bottom:8px">Recommendation</div><div style="color:#94a3b8;font-size:14px;line-height:1.6">4 of 5 agents approve. Strong setup, strong business quality, attractive valuation. Material concern: pension liability disclosure incomplete. Suggest entry sized 5% pending May 22 footnote.</div></div>', unsafe_allow_html=True)
-                dims = [("Setup",sc_d["setup"]),("Business",sc_d["business"]),("Capital",sc_d["capital"]),("Valuation",sc_d["valuation"]),("Incentives",sc_d["incentives"])]
-                dcols = st.columns(5)
-                for col,(name,score) in zip(dcols,dims):
-                    c = sc(score)
-                    col.markdown(f'<div class="stile"><div class="slabel">{name}</div><div class="snum" style="color:{c}">{score}</div><div class="sbar-t"><div class="sbar-f" style="width:{score}%;background:{c}"></div></div></div>', unsafe_allow_html=True)
-                st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
-            if not st.session_state.dj_open:
-                d1,d2,d3 = st.columns(3)
-                with d1:
-                    if st.button("Reject", use_container_width=True):
-                        st.session_state.dj_open=True; st.session_state.dj_verdict="Reject"; st.rerun()
-                with d2:
-                    if st.button("Watch", use_container_width=True):
-                        st.session_state.dj_open=True; st.session_state.dj_verdict="Watch"; st.rerun()
-                with d3:
-                    if st.button("Invest", type="primary", use_container_width=True):
-                        st.session_state.dj_open=True; st.session_state.dj_verdict="Invest"; st.rerun()
-            else:
-                verdict = st.session_state.dj_verdict
-                icon = {"Invest":"✅","Watch":"👁","Reject":"🔴"}.get(verdict,"")
-                st.markdown(f"<hr><div style='font-size:16px;font-weight:700;margin-bottom:12px'>{icon} Decision Journal — {verdict}</div>", unsafe_allow_html=True)
-                with st.form("dj_form"):
-                    pd_sel = st.selectbox("Primary driver *",["Business quality","Valuation discount","Hard catalyst","Management alignment","Forced-selling setup","Other"])
-                    conv   = st.slider("Conviction *",1,10,6)
-                    risk   = st.text_input("Biggest acknowledged risk *", placeholder="e.g. Debt maturity wall in 18 months")
-                    thesis = st.text_area("Core thesis (1–3 sentences) *", placeholder="e.g. Small-cap spinoff…", height=80)
-                    sc1,sc2 = st.columns(2)
-                    with sc1: sub_dj = st.form_submit_button(f"Log {verdict} →", type="primary", use_container_width=True)
-                    with sc2: cancel = st.form_submit_button("Cancel", use_container_width=True)
-                    if cancel:
-                        st.session_state.dj_open=False; st.session_state.dj_verdict=None; st.rerun()
-                    if sub_dj:
-                        if not risk.strip() or not thesis.strip():
-                            st.error("Risk and thesis are required.")
+            # STEP 1
+            if cur == 1:
+                st.markdown('<div class="stitle">Step 1 · Intake</div><div class="ssub">Validates ticker on EDGAR, fetches entity record, links parent/spinco.</div>', unsafe_allow_html=True)
+                with st.form("intake_form"):
+                    fc1,fc2 = st.columns(2)
+                    with fc1: ticker_in = st.text_input("Ticker", value=st.session_state.na_ticker, placeholder="LUMN")
+                    with fc2: sit_in    = st.selectbox("Situation type", SITUATION_TYPES, index=SITUATION_TYPES.index(st.session_state.na_sit_type))
+                    parent_in = st.text_input("Parent ticker (auto-detected)", value=st.session_state.na_parent_ticker, placeholder="CTL")
+                    seed_in   = st.text_input("Optional · newsletter or article URL (seed thesis)", value=st.session_state.na_seed_url, placeholder="https://...")
+                    _,bc = st.columns([2,1])
+                    with bc: sub = st.form_submit_button("Validate and continue →", type="primary", use_container_width=True)
+                    if sub:
+                        if not ticker_in.strip():
+                            st.error("Ticker is required.")
                         else:
-                            st.session_state.dj_open=False; st.session_state.dj_verdict=None
-                            st.success(f"{icon} **{verdict}** logged · Conviction {conv}/10")
-                            st.balloons()
+                            st.session_state.na_ticker        = ticker_in.strip().upper()
+                            st.session_state.na_sit_type      = sit_in
+                            st.session_state.na_parent_ticker = parent_in.strip().upper()
+                            st.session_state.na_seed_url      = seed_in.strip()
+                            st.session_state.na_step1_done    = True
+                            st.session_state.na_step          = 2
+                            st.rerun()
 
-        st.markdown("</div></div>", unsafe_allow_html=True)
+            # STEP 2
+            elif cur == 2:
+                resolved = _docs_resolved()
+                st.markdown('<div class="stitle">Step 2 · Documents</div><div class="ssub">Add documents three ways: EDGAR auto-fetch, PDF upload, or URL paste.</div>', unsafe_allow_html=True)
+                mc1,mc2,mc3 = st.columns(3)
+                with mc1:
+                    st.markdown('<div class="mcard"><div class="mcardtitle">⬇ EDGAR fetch</div><div class="mcarddesc">Form 10, 10-K, 10-Q, 8-K, DEF 14A</div></div>', unsafe_allow_html=True)
+                    if st.button("Fetch ↗", key="edgar_fetch", use_container_width=True):
+                        st.session_state.na_doc_states["form10"]     = "fetched"
+                        st.session_state.na_doc_states["parent_10k"] = "fetched"
+                        st.toast("EDGAR fetch complete (placeholder)")
+                        st.rerun()
+                with mc2:
+                    st.markdown('<div class="mcard"><div class="mcardtitle">⬆ Upload PDF</div><div class="mcarddesc">Decks, paywalled writeups</div></div>', unsafe_allow_html=True)
+                    up = st.file_uploader("", accept_multiple_files=True, type=["pdf"], key="doc_upload", label_visibility="collapsed")
+                    if up:
+                        st.session_state.na_doc_states["investor_deck"] = "uploaded"
+                        st.rerun()
+                with mc3:
+                    st.markdown('<div class="mcard"><div class="mcardtitle">🔗 Paste URL</div><div class="mcarddesc">Newsletters, transcripts, articles</div></div>', unsafe_allow_html=True)
+                    purl = st.text_input("", key="paste_url", placeholder="https://...", label_visibility="collapsed")
+                    if purl and st.button("Add", key="add_url"):
+                        st.session_state.na_doc_states["newsletter"] = "url"
+                        st.rerun()
+
+                st.markdown(f"<div style='height:16px'></div><div style='font-weight:600;margin-bottom:10px'>Checklist · {resolved} of {len(REQUIRED_DOCS)} resolved</div>", unsafe_allow_html=True)
+                for lbl2, key2 in REQUIRED_DOCS:
+                    state = st.session_state.na_doc_states[key2]
+                    if state == "fetched":
+                        st.markdown(f'<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid #222"><div style="display:flex;align-items:center;gap:10px"><span style="color:#4ade80">✓</span><span style="font-size:14px">{lbl2}</span></div><span class="tag-edgar">EDGAR</span></div>', unsafe_allow_html=True)
+                    elif state == "uploaded":
+                        st.markdown(f'<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid #222"><div style="display:flex;align-items:center;gap:10px"><span style="color:#4ade80">✓</span><span style="font-size:14px">{lbl2}</span></div><span class="tag-up">Uploaded</span></div>', unsafe_allow_html=True)
+                    elif state == "url":
+                        st.markdown(f'<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid #222"><div style="display:flex;align-items:center;gap:10px"><span style="color:#4ade80">✓</span><span style="font-size:14px">{lbl2}</span></div><span class="tag-up">URL</span></div>', unsafe_allow_html=True)
+                    else:
+                        rl,rb = st.columns([3,2])
+                        rl.markdown(f'<div style="display:flex;align-items:center;gap:10px;padding:6px 0"><span style="color:#64748b">☐</span><span style="font-size:14px">{lbl2}</span></div>', unsafe_allow_html=True)
+                        b1,b2,b3 = rb.columns(3)
+                        b1.button("Upload", key=f"ul_{key2}", use_container_width=True)
+                        b2.button("URL",    key=f"ur_{key2}", use_container_width=True)
+                        b3.button("Skip",   key=f"sk_{key2}", use_container_width=True)
+
+                st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
+                if resolved >= 4:
+                    _,pb = st.columns([2,1])
+                    with pb:
+                        if st.button("Index documents →", type="primary", use_container_width=True):
+                            st.session_state.na_step2_done = True
+                            st.session_state.na_step       = 3
+                            st.rerun()
+                else:
+                    st.warning(f"{resolved} / {len(REQUIRED_DOCS)} resolved — need at least 4 to continue.")
+
+            # STEP 3
+            elif cur == 3:
+                st.markdown('<div class="stitle">Step 3 · Ingest</div><div class="ssub">LlamaParse + markdown chunking + hybrid retrieval. Failures highlighted in red.</div>', unsafe_allow_html=True)
+                if not st.session_state.na_ingest_done:
+                    if st.button("▶  Run ingestion", type="primary"):
+                        import time
+                        with st.spinner("Running ingestion pipeline…"):
+                            time.sleep(1)
+                        st.session_state.na_ingest_done = True
+                        st.rerun()
+                else:
+                    for lbl3, ok, timing in [
+                        ("Parsing PDFs · 5 of 5 · 1,847 pages", True,  "42s"),
+                        ("Markdown chunking · 3,201 chunks",     True,  "18s"),
+                        ("Hybrid index · BM25 + embeddings",     True,  "31s"),
+                        ("Newsletter URL · 403 forbidden",       False, None),
+                        ("Pre-extracted financials",              True,  "22s"),
+                    ]:
+                        if ok:
+                            st.markdown(f'<div class="irow"><div><span class="ick">✓</span>{lbl3}</div><span class="itime">{timing}</span></div>', unsafe_allow_html=True)
+                        else:
+                            st.markdown('<div class="ierr"><div style="font-weight:600">⚠ Newsletter URL · 403 forbidden</div><div style="color:#f8717180;font-size:12px;margin-top:2px">Paywalled. Retry or upload PDF.</div></div>', unsafe_allow_html=True)
+                            _,ec1,ec2,_2 = st.columns([3,1,1,2])
+                            ec1.button("Retry",  key="ir")
+                            ec2.button("Upload", key="iu")
+                    _,pb = st.columns([2,1])
+                    with pb:
+                        if st.button("Explore the corpus →", type="primary", use_container_width=True):
+                            st.session_state.na_step = 4
+                            st.rerun()
+
+            # STEP 4
+            elif cur == 4:
+                st.markdown('<div class="stitle">Step 4 · Explore</div><div class="ssub">Grounded Q&A with save-to-notes and tags.</div>', unsafe_allow_html=True)
+                for i, entry in enumerate(st.session_state.na_qa_history):
+                    st.markdown(f'<div class="chatq"><div class="av av-u">👤</div><span style="font-size:14px">{entry["q"]}</span></div><div class="chata"><div style="display:flex;align-items:flex-start;gap:10px"><div class="av av-m">M</div><div><div style="font-size:14px;line-height:1.6;margin-bottom:8px">{entry["a"]}</div><div><span class="ctag">Form 10 p. 87</span><span class="ctag">Q1 transcript</span><span class="ctag">10-K note 14</span></div></div></div></div>', unsafe_allow_html=True)
+                    sa,ta,da,_ = st.columns([1,1,1,3])
+                    sa.button("🔖 Save",       key=f"sv_{i}")
+                    ta.button("🏷 #pension",   key=f"tg_{i}")
+                    da.button("🔍 Dig deeper", key=f"dg_{i}")
+                st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
+                qi,rb = st.columns([4,1])
+                with qi: q = st.text_input("", placeholder="Ask another question...", key="qa_input", label_visibility="collapsed")
+                with rb:
+                    if st.button("Run committee →", type="primary", use_container_width=True):
+                        st.session_state.na_step = 5
+                        st.rerun()
+                if q and st.button("Ask", key="ask_q"):
+                    st.session_state.na_qa_history.append({"q":q,"a":"$1.2B net debt (3.1x EBITDA). Form 10 p. 87: $340M pension liability. CFO declined to quantify funding shortfall on Q1 call.","saved":False})
+                    st.rerun()
+
+            # STEP 5
+            elif cur == 5:
+                st.markdown('<div class="stitle">Step 5 · Committee</div><div class="ssub">5 agents debate the Greenblatt scorecard.</div>', unsafe_allow_html=True)
+                if not st.session_state.na_committee_done:
+                    if st.button("▶  Convene committee", type="primary"):
+                        import time
+                        with st.spinner("Agents debating…"):
+                            time.sleep(2)
+                        st.session_state.na_scorecard = {"setup":82,"business":84,"capital":65,"valuation":80,"incentives":78,"composite":78}
+                        st.session_state.na_committee_done = True
+                        st.rerun()
+                else:
+                    for letter,role,color,score,summary in AGENTS:
+                        s_str = f" · {score}" if score else ""
+                        st.markdown(f'<div class="agrow"><div class="agav" style="background:{color}30;color:{color}">{letter}</div><div><div style="font-weight:600;font-size:14px">{role}{s_str}</div><div style="color:#94a3b8;font-size:13px;margin-top:2px">{summary}</div></div></div>', unsafe_allow_html=True)
+                    st.markdown('<p style="color:#64748b;font-size:13px;margin-top:4px">+ Valuation and Incentives agents weighing in…</p>', unsafe_allow_html=True)
+                    _,pb = st.columns([2,1])
+                    with pb:
+                        if st.button("View memo →", type="primary", use_container_width=True):
+                            st.session_state.na_step = 6
+                            st.rerun()
+
+            # STEP 6
+            elif cur == 6:
+                sc_d = st.session_state.na_scorecard
+                comp = sc_d["composite"] if sc_d else "—"
+                st.markdown(f'<div class="stitle">Step 6 · Memo and decision</div><div class="ssub">Composite {comp}/100. Click Approve / Watch / Reject.</div>', unsafe_allow_html=True)
+                if sc_d:
+                    st.markdown('<div style="background:#2a2a2a;border-radius:10px;padding:16px;margin-bottom:16px"><div style="font-weight:600;font-size:14px;margin-bottom:8px">Recommendation</div><div style="color:#94a3b8;font-size:14px;line-height:1.6">4 of 5 agents approve. Strong setup, strong business quality, attractive valuation. Material concern: pension liability disclosure incomplete. Suggest entry sized 5% pending May 22 footnote.</div></div>', unsafe_allow_html=True)
+                    dims = [("Setup",sc_d["setup"]),("Business",sc_d["business"]),("Capital",sc_d["capital"]),("Valuation",sc_d["valuation"]),("Incentives",sc_d["incentives"])]
+                    dcols = st.columns(5)
+                    for col,(name,score) in zip(dcols,dims):
+                        c = sc(score)
+                        col.markdown(f'<div class="stile"><div class="slabel">{name}</div><div class="snum" style="color:{c}">{score}</div><div class="sbar-t"><div class="sbar-f" style="width:{score}%;background:{c}"></div></div></div>', unsafe_allow_html=True)
+                    st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
+                if not st.session_state.dj_open:
+                    d1,d2,d3 = st.columns(3)
+                    with d1:
+                        if st.button("Reject", use_container_width=True):
+                            st.session_state.dj_open=True; st.session_state.dj_verdict="Reject"; st.rerun()
+                    with d2:
+                        if st.button("Watch", use_container_width=True):
+                            st.session_state.dj_open=True; st.session_state.dj_verdict="Watch"; st.rerun()
+                    with d3:
+                        if st.button("Invest", type="primary", use_container_width=True):
+                            st.session_state.dj_open=True; st.session_state.dj_verdict="Invest"; st.rerun()
+                else:
+                    verdict = st.session_state.dj_verdict
+                    icon = {"Invest":"✅","Watch":"👁","Reject":"🔴"}.get(verdict,"")
+                    st.markdown(f"<hr><div style='font-size:16px;font-weight:700;margin-bottom:12px'>{icon} Decision Journal — {verdict}</div>", unsafe_allow_html=True)
+                    with st.form("dj_form"):
+                        pd_sel = st.selectbox("Primary driver *",["Business quality","Valuation discount","Hard catalyst","Management alignment","Forced-selling setup","Other"])
+                        conv   = st.slider("Conviction *",1,10,6)
+                        risk   = st.text_input("Biggest acknowledged risk *", placeholder="e.g. Debt maturity wall in 18 months")
+                        thesis = st.text_area("Core thesis (1–3 sentences) *", placeholder="e.g. Small-cap spinoff…", height=80)
+                        sc1,sc2 = st.columns(2)
+                        with sc1: sub_dj = st.form_submit_button(f"Log {verdict} →", type="primary", use_container_width=True)
+                        with sc2: cancel = st.form_submit_button("Cancel", use_container_width=True)
+                        if cancel:
+                            st.session_state.dj_open=False; st.session_state.dj_verdict=None; st.rerun()
+                        if sub_dj:
+                            if not risk.strip() or not thesis.strip():
+                                st.error("Risk and thesis are required.")
+                            else:
+                                st.session_state.dj_open=False; st.session_state.dj_verdict=None
+                                st.success(f"{icon} **{verdict}** logged · Conviction {conv}/10")
+                                st.balloons()
 
 # ══════════════════════════════════════════════════════════════════════════════
 # UPDATES
